@@ -1,38 +1,13 @@
-# Client-Visible Relay Diagnostics for Media over QUIC Transport (MOQT)
+# Internet-Draft Template Repository
 
-This is the working area for the individual Internet-Draft,
-"Client-Visible Relay Diagnostics for Media over QUIC Transport (MOQT)",
-for discussion in the IETF [MOQ Working Group](https://datatracker.ietf.org/group/moq/documents/).
+Use this repository as a template if you want to start working on
+[IETF](https://www.ietf.org/) documents. [Click here to create a new repository using the
+template](https://github.com/martinthomson/internet-draft-template/generate).
+Make sure to check "Include all branches", or you will need to enable GitHub Pages manually.
 
-* [Editor's Copy (Markdown source)](https://github.com/altanai/draft-altanai-moq-relay-diagnostics/blob/main/draft-altanai-moq-relay-diagnostics.md)
-* [Issue Tracker](https://github.com/altanai/draft-altanai-moq-relay-diagnostics/issues)
-* [Related transport issue #1692](https://github.com/moq-wg/moq-transport/issues/1692)
+[Read the
+instructions](https://github.com/martinthomson/i-d-template/blob/main/doc/TEMPLATE.md)
+for more information.
 
-The formatted editor's copy is pending initial repository setup. Datatracker,
-submitted-draft, and comparison links will be added after the first submission.
-
-
-## Contributing
-
-Contributions can be made by creating issues or pull requests.
-The GitHub interface supports creating pull requests using the Edit (✏) button.
-
-Discussion is welcome on the
-[MOQ mailing list](https://www.ietf.org/mailman/listinfo/moq)
-([archive](https://mailarchive.ietf.org/arch/browse/moq/)).
-
-
-## Command Line Usage
-
-After completing the initial
-[Internet-Draft template setup](https://github.com/martinthomson/i-d-template/blob/main/doc/TEMPLATE.md),
-formatted text and HTML versions of the draft can be built using `make`.
-This repository currently contains the draft source and template workflows;
-the build Makefile has not yet been initialized.
-
-```sh
-$ make
-```
-
-Command line usage requires that you have the necessary software installed. See
-[the instructions](https://github.com/martinthomson/i-d-template/blob/main/doc/SETUP.md).
+Once you have created your own repository, start work by
+[renaming the `draft-todo-yourname-protocol.md` file](../../edit/main/draft-todo-yourname-protocol.md).
