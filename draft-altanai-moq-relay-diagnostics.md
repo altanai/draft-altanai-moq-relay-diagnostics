@@ -4,7 +4,7 @@ abbrev: "MOQT Relay Diagnostics"
 category: info
 docname: draft-altanai-moq-relay-diagnostics-latest
 submissiontype: IETF
-date: 2026-08-10
+date: 2026-11-18
 consensus: false
 v: 1
 area: "Web and Internet Transport"
@@ -36,13 +36,19 @@ informative:
     title: "Metrics over MOQT"
     author:
       name: "C. Jennings"
-    date: 2025
+    date: 2026
     target: "https://datatracker.ietf.org/doc/draft-jennings-moq-metrics/"
+  MoQLog:
+    title: "Logging over Media over QUIC Transport"
+    author:
+      name: "C. Jennings"
+    date: 2026
+    target: "https://datatracker.ietf.org/doc/draft-jennings-moq-log/"
   QLOG:
     title: "Main Logging Schema for qlog"
     author:
       org: "IETF QUIC WG"
-    date: 2025
+    date: 2026
     target: "https://datatracker.ietf.org/doc/draft-ietf-quic-qlog-main-schema/"
   Issue1692:
     title: "moq-transport issue #1692: client-visible relay diagnostics"
@@ -55,6 +61,8 @@ informative:
 Media over QUIC Transport (MOQT) deployments typically place one or more relays between publishers and subscribers. When delivery stalls, degrades, or fails, a client observes only its own leg of the path, and often cannot determine whether the cause lies with the original publisher, an intermediate relay, path conditions, authorization policy, or its own behavior.
 
 This document collects use cases and requirements for exposing a limited, relay-controlled set of diagnostic information to authorized MOQT clients. It examines three candidate mechanisms: an explicit request and response exchange on the control path, diagnostic information carried in existing responses and error codes, and advertisement of diagnostic capability during session establishment. Because such information can reveal deployment topology, operational state, or the activity of other users, authorization, data minimization, and relay discretion over what is disclosed are treated as first-order requirements rather than later refinements.
+
+Related operator examples describe capacity and incident observations within a separately authorized administrative scope. They motivate correlation with existing metrics and logging systems without defining a relay management API.
 
 The goal is diagnostics that are actionable at runtime and interoperable across implementations, not a general-purpose telemetry channel within MOQT. Information intended primarily for offline analysis remains the province of logging and observability systems such as qlog. This document defines the problem space and the design constraints; a concrete wire format is left to a follow-on document once the working group has settled on an approach.
 
@@ -83,37 +91,7 @@ protocol elements. Comments are welcome on the MOQ working group mailing list.
 
 # Problem Statement
 
-MOQT endpoints can observe events on their own sessions, including the
-messages they send and receive and the objects delivered to them. A subscriber
-does not automatically observe the state of a relay's other sessions, its
-upstream path, or the policy decisions made inside the relay. A publisher has a
-similarly limited view of downstream relay and subscriber behavior. Encryption
-and relay boundaries are intentional parts of the architecture; diagnostics
-must not assume that an endpoint can inspect every hop.
-
-As a result, a client may know that an object did not arrive before an
-application deadline, but not whether the relay received it, whether the relay
-was able to obtain it upstream, whether local policy prevented forwarding, or
-whether the object was delayed or lost on the client-facing path. The same
-visible symptom can have causes at different points in the delivery chain.
-Some causes are also outside the relay's knowledge: a relay cannot reliably
-describe a publisher's internal state or a network segment it does not
-observe.
-
-The problem is therefore not to expose a complete view of relay internals. It
-is to let an authorized client obtain a small, carefully scoped explanation of
-the relay's own handling of a request or delivery when that explanation can
-help the client or operator choose a next action. A diagnostic is an
-observation reported by one relay. It is not a proof of end-to-end delivery,
-an attestation of another endpoint's behavior, or a guarantee that the relay
-has complete information.
-
-Diagnostics can also create risk. A response that reveals relay identity,
-upstream relationships, cache contents, load, policy details, or other
-clients' activity can assist traffic analysis, targeted attacks, or
-cross-tenant inference. A mechanism that permits unlimited queries can add
-load to a relay or become a reflection or probing facility. Privacy and
-resource limits are therefore central design constraints.
+MOQT clients observe only their own sessions and cannot reliably determine why delivery stalls or fails across a relay chain. An authorized client needs a small, request-scoped account of what its relay observed and did, sufficient to guide waiting, retrying, or reporting a problem. That account can be incomplete and cannot establish end-to-end delivery or identify causes outside the relay's knowledge. Disclosure must protect other clients, topology, cache state, and operational policy, while keeping diagnostic processing and query rates bounded.
 
 # Use Cases
 
@@ -170,10 +148,154 @@ it should reveal only the feature category needed for interoperability. It
 should not fingerprint a relay implementation or disclose deployment
 topology.
 
+# Illustrative Diagnostic Observations
+
+The following proposed metrics describe one client's existing, authorized
+request. Their names and semantics are starting points for discussion, not
+standardized MOQT fields, mandatory measurements, or a selected wire format.
+Counter and Gauge have the numeric meanings described in [MoQMetrics]. A relay
+would disclose a metric only when it can attribute the observation to that
+request using bounded local state and its disclosure policy permits access.
+
+| Suggested metric | Type and unit | Proposed meaning |
+| --- | --- | --- |
+| `request_objects_observed_total` | Counter; objects | Cumulative number of distinct, complete data Objects accepted into this request's forwarding path after its filters and policy checks. |
+| `request_objects_forwarded_total` | Counter; objects | Cumulative number of distinct, complete data Objects handed to the outgoing transport for this request. This local handoff does not establish client receipt, decoding, or playback. |
+| `request_queued_objects` | Gauge; objects | Complete, eligible Objects still held by this relay awaiting completion of transport handoff for this request, including any retained unsent portion of an Object. Excludes transport-internal buffering and shared cache inventory. |
+| `request_last_forward_age_seconds` | Gauge; seconds | Monotonic elapsed time since the last complete-Object handoff for this request, rounded upward to a disclosed precision when policy requires. Omitted if no such handoff is known. |
+
+## Counting and Measurement Scope
+
+The two Counters start at zero when observation begins for the request and
+increase within one measurement epoch. A restart, reset, or change of
+measurement scope starts a new epoch, distinguished by a short-lived,
+session-local value. A 10-second count is the difference between two samples
+from the same epoch; a `_total` value is not a rolling 10-second count.
+Samples from different epochs cannot be subtracted.
+
+The Counters use independent acceptance and handoff boundaries. An Object
+accepted before an epoch or comparison window can complete handoff inside it,
+incrementing only the forwarding Counter for that interval. Their difference
+is therefore not a balance and can be negative over a comparison window.
+
+An Object is identified within a request by its Full Track Name, Group ID,
+and Object ID, and contributes at most once to each Counter per epoch.
+Incomplete Objects, status markers, duplicates, and transport retransmissions
+do not increment these Counters. Cached Objects can count when accepted into
+or handed off for this request; the report does not identify their source or
+expose shared cache activity. A relay omits a metric if bounded attribution
+or duplicate suppression is unavailable, including under subscription
+aggregation.
+
+The queue Gauge can decrease when Objects expire or are discarded, as well
+as when they are handed off. The Counter difference therefore does not
+necessarily equal queue depth and does not establish packet loss or a cause.
+The age Gauge uses a local monotonic clock and discloses no exact event
+timestamp. For example, with upward rounding in 5-second steps, a scalar
+value of 5 means an age greater than zero and at most 5 seconds; an interval
+such as `[1, 5]` is not a numeric Gauge value.
+
+## Example and Disclosure Limits
+
+This conceptual report samples an epoch 10 seconds after observation began.
+Its Counter values are totals since that epoch began; later window counts
+would require comparable earlier samples. The age value is rounded upward
+in 5-second steps. All field names, epoch and precision metadata, and JSON
+encoding below are illustrative and carry no protocol allocation or
+interoperability requirement.
+
+```json
+{
+  "scope": "existing_request",
+  "measurement_epoch": "session-local-example",
+  "measurement_elapsed_seconds": 10,
+  "metrics": {
+    "request_objects_observed_total": 120,
+    "request_objects_forwarded_total": 117,
+    "request_queued_objects": 2,
+    "request_last_forward_age_seconds": 5
+  },
+  "age_rounding_seconds": 5,
+  "progress": "forwarding_observed",
+  "cause": "unknown",
+  "coverage": "partial"
+}
+```
+
+Unsupported, unavailable, withheld, or unattributable measurements are omitted,
+not replaced with zero. Zero represents a measured zero, such as no handoff
+counted in this epoch. For the age Gauge, no known handoff means omission,
+not zero. Any indication of why a value is absent is also subject to
+disclosure policy. Approximate request-specific bytes forwarded or
+a coarse progress category, such as waiting or unknown, can supplement the
+four metrics without exposing peer identities or asserting an upstream cause.
+
+Reports exclude cache-hit status, topology, relay-wide load, and other users'
+activity. Query rates, processing, response size, and retention need limits;
+producing a measurement must not initiate upstream retrieval or subscriptions.
+The working group would need to agree these semantics, precision metadata,
+authorization and request binding, and any mapping to [MoQMetrics] before
+implementations could claim interoperability.
+
+# Operator Diagnostics at Operational Scale
+
+Operators need to assess service health across authorized relays, locate
+capacity pressure, and correlate user reports with local delivery events.
+Their administrative view can include measurements that are unsuitable for
+ordinary clients. The observations below are illustrative operator metrics,
+not standardized names or additions to the client-visible report. They can
+be collected through existing [MoQMetrics], [MoQLog], [QLOG], or deployment
+observability systems; this document selects no management protocol.
+
+| Suggested operator observation | Type and unit | Operational use and measurement scope |
+| --- | --- | --- |
+| `relay_active_sessions` | Gauge; sessions | Current established MOQT sessions at one relay; helps identify connection load and changes during draining. |
+| `relay_active_subscriptions` | Gauge; subscriptions | Current established subscriptions at that relay; counts local subscription instances, not unique viewers or end-to-end subscriptions. |
+| `relay_requests_total` | Counter; requests | Local request attempts reaching initial acceptance, rejection, timeout, or cancellation, counted once per attempt. Bounded labels distinguish request type, direction, and outcome; each retry is a separate attempt. |
+| `relay_queued_payload_bytes` | Gauge; bytes | Unsent payload retained in relay-managed forwarding queues, counted per pending downstream delivery; measures delivery backlog rather than physical memory or transport-internal buffers. |
+| `relay_delivery_timeout_resets_total` | Counter; streams | Locally initiated data-stream terminations for delivery timeout, counted once per stream; helps detect deadline pressure without treating every affected Object as a separate reset. |
+| `relay_cpu_utilization` | Gauge; fraction | Process CPU consumption divided by available process CPU capacity over a disclosed sample interval; the interval and capacity basis accompany the observation. |
+| `relay_process_resident_memory_bytes` | Gauge; bytes | Resident memory of the relay process, with collection method identified; useful for capacity assessment alongside queue and cache observations. |
+| `relay_cached_payload_bytes` | Gauge; bytes | Total payload length of distinct cached Objects, counted once per Full Track Name, Group ID, and Object ID; excludes metadata and is not physical process memory. |
+
+For example, a sustained rise in queue bytes together with delivery-timeout
+resets can guide investigation of scheduling or downstream capacity. A rise
+in failed upstream request attempts, observed where the relay acts as a
+requester, can guide examination of that relay's upstream connections. High
+CPU or resident memory with growing load can motivate capacity planning or
+draining. These are correlations to investigate, not proof of a cause or of
+the quality experienced by every viewer.
+
+## Aggregation and Access Boundaries
+
+Every operator sample needs an administrative scope, collection interval or
+capture time, freshness, and coverage. Counters have local measurement
+epochs; rates or window deltas are calculated per relay before aggregation
+so restarts are not mistaken for traffic changes. Gauges are combined only
+across disjoint scopes with compatible meanings. Fleet reports disclose
+missing or stale contributors instead of presenting partial coverage as a
+complete service view. Fleet CPU fractions are weighted by the disclosed
+capacity basis rather than summed. Capacity thresholds and alert policies remain
+deployment decisions.
+
+Operator authorization is role- and scope-specific. A tenant operator sees
+only that tenant's authorized observations; node-wide CPU, shared-cache
+inventory, or another tenant's activity needs separate permission. Collector
+access, retention, and incident correlation need auditing and access controls.
+Labels use bounded categories such as request type and outcome, avoiding
+tokens, user identifiers, full content names, or arbitrary peer addresses.
+Detailed logs or traces are retrieved only for an authorized, bounded
+incident context, with sensitive fields minimized. These operational views
+are not returned through an ordinary client's private diagnostic view.
+
 # Requirements
 
 These requirements describe design goals for a future mechanism. They do not
 specify MOQT messages or require relays to expose operational information.
+Requirements to identify an individual request or report from one relay apply
+to the client-visible view. Operator aggregates instead identify their
+administrative scope, contributing relays, coverage, and freshness as
+described above; they retain the applicable access and resource limits.
 
 ## Diagnostic Scope
 
@@ -196,6 +318,9 @@ specify MOQT messages or require relays to expose operational information.
 * Diagnostic responses need to be scoped to the requesting client's own
   session and request, except where a separately defined and authorized
   operator interface is used.
+* Operator collection needs explicit administrative and tenant scope,
+  role-based access, bounded retention, and auditability. Authorization for
+  content delivery or a client diagnostic view does not grant operator access.
 * A mechanism needs to support data minimization: disclose the least
   information useful for the stated diagnostic purpose, and allow the relay to
   omit sensitive fields.
@@ -274,18 +399,17 @@ This work concerns request-scoped explanations that can help an endpoint make
 a runtime decision or help a user report a problem. It is not a general
 metrics format, a relay management API, or a logging protocol.
 
-[MoQMetrics] concerns metrics carried over MOQT. A metrics stream can expose
-ongoing measurements for an authorized purpose; the use cases here instead
-focus on a limited explanation associated with a particular request or
-delivery symptom. The working group should ensure that any future design
-complements metrics work and does not create overlapping ways to export the
-same operational data.
+[MoQMetrics] provides a numeric data model, live subscriptions, and retrieval
+of cached measurements. Its Counter and Gauge types are candidates for the
+observations illustrated here. The proposed request semantics, attribution,
+and disclosure rules would need an agreed mapping, including naming and
+authorization, rather than a competing metrics transport.
 
-[QLOG] and similar observability systems are useful for detailed event
-recording and offline analysis. They are generally configured and consumed by
-operators or developers, and are not a substitute for a minimal runtime
-answer to a client. This document does not define how qlog is collected,
-stored, or shared.
+[MoQLog] provides structured operational logging over MOQT, while [QLOG]
+provides event representations useful for protocol analysis and incident
+correlation. Existing metrics, logs, and traces can support either audience
+when authorized. The operator examples here motivate reuse of those systems;
+they do not define a replacement collector, dashboard, or management API.
 
 The following are out of scope: exposing a relay's complete internal state;
 distributing network-wide or cross-tenant telemetry to ordinary clients;
@@ -309,6 +433,12 @@ request. General relay health, cross-client statistics, and operator
 correlation should use separately authorized interfaces. Deployments may
 choose not to provide client-visible diagnostics or may provide only a small
 set of coarse outcomes.
+
+Operator observations need separately scoped authorization, tenant isolation,
+access auditing, and retention controls. Aggregation does not by itself make
+data anonymous, and small groups or repeated queries can still reveal an
+individual client's activity. Correlation with detailed logs or traces must
+remain within the operator's authorized incident scope.
 
 Implementations should avoid returning stable relay or client identifiers,
 precise timestamps, exact cache keys, upstream addresses, internal error text,
