@@ -157,12 +157,12 @@ Counter and Gauge have the numeric meanings described in [MoQMetrics]. A relay
 would disclose a metric only when it can attribute the observation to that
 request using bounded local state and its disclosure policy permits access.
 
-| Suggested metric | Type and unit | Proposed meaning |
-| --- | --- | --- |
-| `request_objects_observed_total` | Counter; objects | Cumulative number of distinct, complete data Objects accepted into this request's forwarding path after its filters and policy checks. |
-| `request_objects_forwarded_total` | Counter; objects | Cumulative number of distinct, complete data Objects handed to the outgoing transport for this request. This local handoff does not establish client receipt, decoding, or playback. |
-| `request_queued_objects` | Gauge; objects | Complete, eligible Objects still held by this relay awaiting completion of transport handoff for this request, including any retained unsent portion of an Object. Excludes transport-internal buffering and shared cache inventory. |
-| `request_last_forward_age_seconds` | Gauge; seconds | Monotonic elapsed time since the last complete-Object handoff for this request, rounded upward to a disclosed precision when policy requires. Omitted if no such handoff is known. |
+| Suggested metric | Proposed meaning |
+| --- | --- |
+| `request_objects_observed_total` | Cumulative number of distinct, complete data Objects accepted into this request's forwarding path after its filters and policy checks. |
+| `request_objects_forwarded_total` | Cumulative number of distinct, complete data Objects handed to the outgoing transport for this request. This local handoff does not establish client receipt, decoding, or playback. |
+| `request_queued_objects` | Complete, eligible Objects still held by this relay awaiting completion of transport handoff for this request, including any retained unsent portion of an Object. Excludes transport-internal buffering and shared cache inventory. |
+| `request_last_forward_age_seconds` | Monotonic elapsed time since the last complete-Object handoff for this request, rounded upward to a disclosed precision when policy requires. Omitted if no such handoff is known. |
 
 ## Counting and Measurement Scope
 
@@ -247,16 +247,16 @@ not standardized names or additions to the client-visible report. They can
 be collected through existing [MoQMetrics], [MoQLog], [QLOG], or deployment
 observability systems; this document selects no management protocol.
 
-| Suggested operator observation | Type and unit | Operational use and measurement scope |
-| --- | --- | --- |
-| `relay_active_sessions` | Gauge; sessions | Current established MOQT sessions at one relay; helps identify connection load and changes during draining. |
-| `relay_active_subscriptions` | Gauge; subscriptions | Current established subscriptions at that relay; counts local subscription instances, not unique viewers or end-to-end subscriptions. |
-| `relay_requests_total` | Counter; requests | Local request attempts reaching initial acceptance, rejection, timeout, or cancellation, counted once per attempt. Bounded labels distinguish request type, direction, and outcome; each retry is a separate attempt. |
-| `relay_queued_payload_bytes` | Gauge; bytes | Unsent payload retained in relay-managed forwarding queues, counted per pending downstream delivery; measures delivery backlog rather than physical memory or transport-internal buffers. |
-| `relay_delivery_timeout_resets_total` | Counter; streams | Locally initiated data-stream terminations for delivery timeout, counted once per stream; helps detect deadline pressure without treating every affected Object as a separate reset. |
-| `relay_cpu_utilization` | Gauge; fraction | Process CPU consumption divided by available process CPU capacity over a disclosed sample interval; the interval and capacity basis accompany the observation. |
-| `relay_process_resident_memory_bytes` | Gauge; bytes | Resident memory of the relay process, with collection method identified; useful for capacity assessment alongside queue and cache observations. |
-| `relay_cached_payload_bytes` | Gauge; bytes | Total payload length of distinct cached Objects, counted once per Full Track Name, Group ID, and Object ID; excludes metadata and is not physical process memory. |
+| Suggested operator observation | Operational use and measurement scope |
+| --- | --- |
+| `relay_active_sessions` | Current established MOQT sessions at one relay; helps identify connection load and changes during draining. |
+| `relay_active_subscriptions` | Current established subscriptions at that relay; counts local subscription instances, not unique viewers or end-to-end subscriptions. |
+| `relay_requests_total` | Local request attempts reaching initial acceptance, rejection, timeout, or cancellation, counted once per attempt. Bounded labels distinguish request type, direction, and outcome; each retry is a separate attempt. |
+| `relay_queued_payload_bytes` | Unsent payload retained in relay-managed forwarding queues, counted per pending downstream delivery; measures delivery backlog rather than physical memory or transport-internal buffers. |
+| `relay_delivery_timeout_resets_total` | Locally initiated data-stream terminations for delivery timeout, counted once per stream; helps detect deadline pressure without treating every affected Object as a separate reset. |
+| `relay_cpu_utilization` | Process CPU consumption divided by available process CPU capacity over a disclosed sample interval; the interval and capacity basis accompany the observation. |
+| `relay_process_resident_memory_bytes` | Resident memory of the relay process, with collection method identified; useful for capacity assessment alongside queue and cache observations. |
+| `relay_cached_payload_bytes` | Total payload length of distinct cached Objects, counted once per Full Track Name, Group ID, and Object ID; excludes metadata and is not physical process memory. |
 
 For example, a sustained rise in queue bytes together with delivery-timeout
 resets can guide investigation of scheduling or downstream capacity. A rise
