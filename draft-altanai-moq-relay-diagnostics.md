@@ -1,5 +1,5 @@
 ---
-title: "Client-Visible Relay Diagnostics for Media over QUIC Transport (MOQT)"
+title: "Relay Diagnostics for Media over QUIC Transport (MOQT)"
 abbrev: "MOQT Relay Diagnostics"
 category: info
 docname: draft-altanai-moq-relay-diagnostics-latest
