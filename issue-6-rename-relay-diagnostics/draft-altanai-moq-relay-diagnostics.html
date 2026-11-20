@@ -1,0 +1,1990 @@
+<!DOCTYPE html>
+<html lang="en" class="Internet-Draft">
+<head>
+<meta charset="utf-8">
+<meta content="Common,Latin" name="scripts">
+<meta content="initial-scale=1.0" name="viewport">
+<title>Relay Diagnostics for Media over QUIC Transport (MOQT)</title>
+<meta content="Altanai Bisht" name="author">
+<meta content="
+       Media over QUIC Transport (MOQT) deployments typically place one or more relays between publishers and subscribers. When delivery stalls, degrades, or fails, a client observes only its own leg of the path, and often cannot determine whether the cause lies with the original publisher, an intermediate relay, path conditions, authorization policy, or its own behavior. 
+       This document collects use cases and requirements for exposing a limited, relay-controlled set of diagnostic information to authorized MOQT clients. It examines three candidate mechanisms: an explicit request and response exchange on the control path, diagnostic information carried in existing responses and error codes, and advertisement of diagnostic capability during session establishment. Because such information can reveal deployment topology, operational state, or the activity of other users, authorization, data minimization, and relay discretion over what is disclosed are treated as first-order requirements rather than later refinements. 
+       Related operator examples describe capacity and incident observations within a separately authorized administrative scope. They motivate correlation with existing metrics and logging systems without defining a relay management API. 
+       The goal is diagnostics that are actionable at runtime and interoperable across implementations, not a general-purpose telemetry channel within MOQT. Information intended primarily for offline analysis remains the province of logging and observability systems such as qlog. This document defines the problem space and the design constraints; a concrete wire format is left to a follow-on document once the working group has settled on an approach. 
+    " name="description">
+<meta content="xml2rfc 3.35.0" name="generator">
+<meta content="MOQ" name="keyword">
+<meta content="MOQT" name="keyword">
+<meta content="relay" name="keyword">
+<meta content="diagnostics" name="keyword">
+<meta content="observability" name="keyword">
+<meta content="draft-altanai-moq-relay-diagnostics-latest" name="ietf.draft">
+<!-- Generator version information:
+  xml2rfc 3.35.0
+    Python 3.14.10
+    ConfigArgParse 1.10.1
+    google-i18n-address 3.1.1
+    intervaltree 3.2.1
+    Jinja2 3.1.6
+    lxml 6.1.1
+    natsort 8.4.0
+    platformdirs 4.14.7
+    pycountry 24.6.1
+    PyYAML 6.0.3
+    requests 2.33.1
+    wcwidth 0.9.4
+-->
+<link href="draft-altanai-moq-relay-diagnostics.xml" rel="alternate" type="application/rfc+xml">
+<link href="#copyright" rel="license">
+<style type="text/css">@font-face {
+  font-family: 'Lora';
+  font-style: italic;
+  font-weight: 400;
+  font-display: swap;
+  src: local('Lora Italic'), local('Lora-Italic'), url('https://martinthomson.github.io/rfc-css/fonts/lora-italic-cyrillic-ext.woff2') format('woff2');
+  unicode-range: U+0460-052F, U+1C80-1C88, U+20B4, U+2DE0-2DFF, U+A640-A69F, U+FE2E-FE2F;
+}
+@font-face {
+  font-family: 'Lora';
+  font-style: italic;
+  font-weight: 400;
+  font-display: swap;
+  src: local('Lora Italic'), local('Lora-Italic'), url('https://martinthomson.github.io/rfc-css/fonts/lora-italic-cyrillic-ext.woff2') format('woff2');
+  unicode-range: U+0400-045F, U+0490-0491, U+04B0-04B1, U+2116;
+}
+@font-face {
+  font-family: 'Lora';
+  font-style: italic;
+  font-weight: 400;
+  font-display: swap;
+  src: local('Lora Italic'), local('Lora-Italic'), url('https://martinthomson.github.io/rfc-css/fonts/lora-italic-vietnamese.woff2') format('woff2');
+  unicode-range: U+0102-0103, U+0110-0111, U+1EA0-1EF9, U+20AB;
+}
+@font-face {
+  font-family: 'Lora';
+  font-style: italic;
+  font-weight: 400;
+  font-display: swap;
+  src: local('Lora Italic'), local('Lora-Italic'), url('https://martinthomson.github.io/rfc-css/fonts/lora-italic-latin-ext.woff2') format('woff2');
+  unicode-range: U+0100-024F, U+0259, U+1E00-1EFF, U+2020, U+20A0-20AB, U+20AD-20CF, U+2113, U+2C60-2C7F, U+A720-A7FF;
+}
+@font-face {
+  font-family: 'Lora';
+  font-style: italic;
+  font-weight: 400;
+  font-display: swap;
+  src: local('Lora Italic'), local('Lora-Italic'), url('https://martinthomson.github.io/rfc-css/fonts/lora-italic-latin.woff2') format('woff2');
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+2000-206F, U+2074, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+}
+@font-face {
+  font-family: 'Lora';
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: local('Lora Regular'), local('Lora-Regular'), url('https://martinthomson.github.io/rfc-css/fonts/lora-regular-cyrillic-ext.woff2') format('woff2');
+  unicode-range: U+0460-052F, U+1C80-1C88, U+20B4, U+2DE0-2DFF, U+A640-A69F, U+FE2E-FE2F;
+}
+@font-face {
+  font-family: 'Lora';
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: local('Lora Regular'), local('Lora-Regular'), url('https://martinthomson.github.io/rfc-css/fonts/lora-regular-cyrillic.woff2') format('woff2');
+  unicode-range: U+0400-045F, U+0490-0491, U+04B0-04B1, U+2116;
+}
+@font-face {
+  font-family: 'Lora';
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: local('Lora Regular'), local('Lora-Regular'), url('https://martinthomson.github.io/rfc-css/fonts/lora-regular-vietnamese.woff2') format('woff2');
+  unicode-range: U+0102-0103, U+0110-0111, U+1EA0-1EF9, U+20AB;
+}
+@font-face {
+  font-family: 'Lora';
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: local('Lora Regular'), local('Lora-Regular'), url('https://martinthomson.github.io/rfc-css/fonts/lora-regular-latin-ext.woff2') format('woff2');
+  unicode-range: U+0100-024F, U+0259, U+1E00-1EFF, U+2020, U+20A0-20AB, U+20AD-20CF, U+2113, U+2C60-2C7F, U+A720-A7FF;
+}
+@font-face {
+  font-family: 'Lora';
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: local('Lora Regular'), local('Lora-Regular'), url('https://martinthomson.github.io/rfc-css/fonts/lora-regular-latin.woff2') format('woff2');
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+2000-206F, U+2074, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+}
+@font-face {
+  font-family: 'Lora';
+  font-style: normal;
+  font-weight: 700;
+  font-display: swap;
+  src: local('Lora Bold'), local('Lora-Bold'), url('https://martinthomson.github.io/rfc-css/fonts/lora-bold-cyrillic-ext.woff2') format('woff2');
+  unicode-range: U+0460-052F, U+1C80-1C88, U+20B4, U+2DE0-2DFF, U+A640-A69F, U+FE2E-FE2F;
+}
+@font-face {
+  font-family: 'Lora';
+  font-style: normal;
+  font-weight: 700;
+  font-display: swap;
+  src: local('Lora Bold'), local('Lora-Bold'), url('https://martinthomson.github.io/rfc-css/fonts/lora-bold-cyrillic.woff2') format('woff2');
+  unicode-range: U+0400-045F, U+0490-0491, U+04B0-04B1, U+2116;
+}
+@font-face {
+  font-family: 'Lora';
+  font-style: normal;
+  font-weight: 700;
+  font-display: swap;
+  src: local('Lora Bold'), local('Lora-Bold'), url('https://martinthomson.github.io/rfc-css/fonts/lora-bold-vietnamese.woff2') format('woff2');
+  unicode-range: U+0102-0103, U+0110-0111, U+1EA0-1EF9, U+20AB;
+}
+@font-face {
+  font-family: 'Lora';
+  font-style: normal;
+  font-weight: 700;
+  font-display: swap;
+  src: local('Lora Bold'), local('Lora-Bold'), url('https://martinthomson.github.io/rfc-css/fonts/lora-bold-latin-ext.woff2') format('woff2');
+  unicode-range: U+0100-024F, U+0259, U+1E00-1EFF, U+2020, U+20A0-20AB, U+20AD-20CF, U+2113, U+2C60-2C7F, U+A720-A7FF;
+}
+@font-face {
+  font-family: 'Lora';
+  font-style: normal;
+  font-weight: 700;
+  font-display: swap;
+  src: local('Lora Bold'), local('Lora-Bold'), url('https://martinthomson.github.io/rfc-css/fonts/lora-bold-latin.woff2') format('woff2');
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+2000-206F, U+2074, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+}
+@font-face {
+  font-family: 'Lora';
+  font-style: normal;
+  font-weight: 600;
+  font-display: swap;
+  src: local('Lora SemiBold'), local('Lora-SemiBold'), url('https://martinthomson.github.io/rfc-css/fonts/lora-semibold-latin.woff2') format('woff2');
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+2000-206F, U+2074, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+}
+
+@font-face {
+  font-family: 'Oxygen Mono';
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: local('Oxygen Mono'), local('OxygenMono-Regular'), url('https://martinthomson.github.io/rfc-css/fonts/oxygenmono-regular-latin-ext.woff2') format('woff2');
+  unicode-range: U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+0304, U+0308, U+0329, U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C0, U+2113, U+2C60-2C7F, U+A720-A7FF;
+}
+@font-face {
+  font-family: 'Oxygen Mono';
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: local('Oxygen Mono'), local('OxygenMono-Regular'), url('https://martinthomson.github.io/rfc-css/fonts/oxygenmono-regular-latin.woff2') format('woff2');
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+}
+
+@font-face {
+  font-family: 'Sofia Sans Semi Condensed';
+  font-style: italic;
+  font-weight: 1 1000;
+  src: url('https://martinthomson.github.io/rfc-css/fonts/sofiasanssemicondensed-italic-cyrillic-ext.woff2') format('woff2');
+  unicode-range: U+0460-052F, U+1C80-1C8A, U+20B4, U+2DE0-2DFF, U+A640-A69F, U+FE2E-FE2F;
+}
+@font-face {
+  font-family: 'Sofia Sans Semi Condensed';
+  font-style: italic;
+  font-weight: 1 1000;
+  src: url('https://martinthomson.github.io/rfc-css/fonts/sofiasanssemicondensed-italic-cyrillic.woff2') format('woff2');
+  unicode-range: U+0301, U+0400-045F, U+0490-0491, U+04B0-04B1, U+2116;
+}
+@font-face {
+  font-family: 'Sofia Sans Semi Condensed';
+  font-style: italic;
+  font-weight: 1 1000;
+  src: url('https://martinthomson.github.io/rfc-css/fonts/sofiasanssemicondensed-italic-greek.woff2') format('woff2');
+  unicode-range: U+0370-0377, U+037A-037F, U+0384-038A, U+038C, U+038E-03A1, U+03A3-03FF;
+}
+@font-face {
+  font-family: 'Sofia Sans Semi Condensed';
+  font-style: italic;
+  font-weight: 1 1000;
+  src: url('https://martinthomson.github.io/rfc-css/fonts/sofiasanssemicondensed-italic-latin-ext.woff2') format('woff2');
+  unicode-range: U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+0304, U+0308, U+0329, U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C0, U+2113, U+2C60-2C7F, U+A720-A7FF;
+}
+@font-face {
+  font-family: 'Sofia Sans Semi Condensed';
+  font-style: italic;
+  font-weight: 1 1000;
+  src: url('https://martinthomson.github.io/rfc-css/fonts/sofiasanssemicondensed-italic-latin.woff2') format('woff2');
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+}
+@font-face {
+  font-family: 'Sofia Sans Semi Condensed';
+  font-style: normal;
+  font-weight: 1 1000;
+  src: url('https://martinthomson.github.io/rfc-css/fonts/sofiasanssemicondensed-regular-cyrillic-ext.woff2') format('woff2');
+  unicode-range: U+0460-052F, U+1C80-1C8A, U+20B4, U+2DE0-2DFF, U+A640-A69F, U+FE2E-FE2F;
+}
+@font-face {
+  font-family: 'Sofia Sans Semi Condensed';
+  font-style: normal;
+  font-weight: 1 1000;
+  src: url('https://martinthomson.github.io/rfc-css/fonts/sofiasanssemicondensed-regular-cyrillic.woff2') format('woff2');
+  unicode-range: U+0301, U+0400-045F, U+0490-0491, U+04B0-04B1, U+2116;
+}
+@font-face {
+  font-family: 'Sofia Sans Semi Condensed';
+  font-style: normal;
+  font-weight: 1 1000;
+  src: url('https://martinthomson.github.io/rfc-css/fonts/sofiasanssemicondensed-regular-greek.woff2') format('woff2');
+  unicode-range: U+0370-0377, U+037A-037F, U+0384-038A, U+038C, U+038E-03A1, U+03A3-03FF;
+}
+@font-face {
+  font-family: 'Sofia Sans Semi Condensed';
+  font-style: normal;
+  font-weight: 1 1000;
+  src: url('https://martinthomson.github.io/rfc-css/fonts/sofiasanssemicondensed-regular-latin-ext.woff2') format('woff2');
+  unicode-range: U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+0304, U+0308, U+0329, U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C0, U+2113, U+2C60-2C7F, U+A720-A7FF;
+}
+@font-face {
+  font-family: 'Sofia Sans Semi Condensed';
+  font-style: normal;
+  font-weight: 1 1000;
+  src: url('https://martinthomson.github.io/rfc-css/fonts/sofiasanssemicondensed-regular-latin.woff2') format('woff2');
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+}
+
+:root {
+  color-scheme: light dark;
+  --background-color: #fff;
+  --text-color: #222;
+  --title-color: #191919;
+  --link-color: #2a6496;
+  --highlight-color: #f9f9f9;
+  --line-color: #eee;
+  --pilcrow-weak: #ddd;
+  --pilcrow-strong: #bbb;
+  --small-font-size: 14.5px;
+  --font-mono: 'Oxygen Mono', monospace;
+  --font-title: "Sofia Sans Semi Condensed", sans-serif;
+  scrollbar-color: #bbb #eee;
+}
+body {
+  max-width: 600px;
+  margin: 75px auto;
+  padding: 0 5px;
+  color: var(--text-color);
+  background-color: var(--background-color);
+  font: 16px/22px "Lora", serif;
+  scroll-behavior: smooth;
+}
+
+.ears {
+  display: none;
+}
+
+/* headings */
+section {
+  clear: both;
+}
+.section-number {
+  padding-right: 0.5em;
+}
+h1, h2, h3, h4, h5, h6 {
+  font-family: var(--font-title);
+  font-weight: 680;
+  margin: 0.8em 0 0.3em;
+  font-size-adjust: 0.5;
+  color: var(--title-color);
+}
+h1 {
+  &#title {
+    font-size: 32px;
+    line-height: 40px;
+    clear: both;
+    margin: 1.5em 0 0.2em;
+  }
+  &#rfcnum {
+    margin: 1.5em 0 0.2em;
+    & + h1#title {
+      margin: 0.2em 0;
+    }
+  }
+}
+
+h1, h2, h3 {
+  font-size: 22px;
+  line-height: 27px;
+}
+h4, h5, h6 {
+  font-size: 20px;
+  line-height: 24px;
+}
+
+/* general structure */
+.author {
+  padding-bottom: 0.3em;
+  vertical-align: top;
+}
+#abstract+p {
+  font-size: 18px;
+  line-height: 24px;
+  & code, & samp, & tt {
+    font-size: 16px;
+    line-height: 0;
+  }
+}
+
+p {
+  padding: 0;
+  margin: 0.5em 0;
+  text-align: left;
+}
+div {
+  margin: 0;
+}
+.alignRight {
+  margin: 1em 0;
+  &.art-text {
+    background-color: var(--highlight-color);
+    border: 1px solid var(--line-color);
+    border-radius: 3px;
+    padding: 0.5em 1em 0;
+    margin-bottom: 0.5em;
+    & pre {
+      padding: 0;
+      width: auto;
+    }
+  }
+  & > *:first-child {
+    border: none;
+    margin: 0;
+    float: right;
+    clear: both;
+  }
+  & > *:nth-child(2) {
+    clear: both;
+    display: block;
+    border: none;
+  }
+}
+svg {
+  display: block;
+  /* font-family isn't space-separated, but =~ will have to do */
+  &[font-family~="monospace" i], & [font-family~="monospace" i] {
+    font-family: var(--font-mono);
+  }
+}
+.alignCenter {
+  margin: 1em 0;
+  &.art-text {
+    background-color: var(--highlight-color);
+    border: 1px solid var(--line-color);
+    border-radius: 3px;
+    padding: 0.5em 1em 0;
+    margin-bottom: 0.5em;
+    & pre {
+      padding: 0;
+      width: auto;
+    }
+  }
+  & > *:first-child {
+    border: none;
+    /* this isn't optimal, but it's an existence proof.  PrinceXML doesn't
+       support flexbox yet.
+    */
+    display: table;
+    margin: 0 auto;
+  }
+}
+
+/* lists */
+ol, ul {
+  padding: 0;
+  margin: 0 0 0.5em 2em;
+  & :is(ol, ul) {
+    margin-left: 1em;
+  }
+}
+li {
+  margin: 0 0 0.25em 0;
+}
+ul.empty, .ulEmpty {
+  list-style-type: none;
+  & li {
+    margin-top: 0.5em;
+  }
+}
+:is(ul, ol).compact, .ulCompact, .olCompact {
+  margin: 0 0 0 2em;
+  & li {
+    margin: 0;
+    & :first-child { margin-top: 0; }
+    & :last-child { margin-bottom: 0; }
+  }
+}
+
+/* definition lists */
+dl {
+  clear: left;
+  --indent: 3ch;
+  /* --indent: attr(indent ch); not supported in any browser, but we can dream */
+  &.olPercent {
+    --indent: 5ch;
+    & > dt {
+      min-width: calc(var(--indent) - 2ch);
+      float: none;
+    }
+  }
+
+  dl > dd > & {
+    margin-top: 0.5em;
+    margin-bottom: 0;
+  }
+
+  &:not(.dlNewline) > dt {
+    float: left;
+    margin-right: 2ch;
+    min-width: 8ch;
+  }
+  & > dd {
+    margin-bottom: .8em;
+    margin-left: var(--indent) !important; /* stupid element overrides */
+    min-height: 2ex;
+  }
+}
+:is(dl.compact, .dlCompact) > dd {
+  margin-bottom: 0;
+  & > :is(:first-child, .break:first-child + *) {
+    margin-top: 0;
+  }
+  & > :is(:last-child) {
+    margin-bottom: 0;
+  }
+}
+:is(dd, span).break {
+  display: none;
+}
+
+/* links */
+a {
+  text-decoration: none;
+  &[href] {
+    color: var(--link-color);
+    &:hover { text-decoration: underline; }
+    &.selfRef {
+      color: var(--text-color);
+      &:hover {
+        text-decoration: none;
+        background-color: var(--highlight-color);
+      }
+    }
+  }
+}
+.iref + a[href].internal {
+  color: var(--text-color);
+}
+a.xref:is(.cite, .auto), :is(#status-of-memo, #copyright) a {
+  white-space: nowrap;
+}
+
+/* Figures */
+tt, code, pre {
+  background-color: var(--highlight-color);
+  font: 14px/22px var(--font-mono);
+}
+tt, code {
+  /* changing the font for inline elements leads to different ascender
+     and descender heights; as we want to retain baseline alignment,
+     remove leading to avoid altering the final height of lines
+     note: this fails if these blocks take an entire line,
+     a different solution would be great */
+  line-height: 0;
+}
+:is(h1, h2, h3, h4, h5, h6) :is(tt, code) {
+  font-size: 84%;
+}
+pre {
+  border: 1px solid var(--line-color);
+  font-size: 13.5px;
+  line-height: 16px;
+  letter-spacing: -0.2px;
+  margin: 5px;
+  padding: 5px;
+}
+img {
+  max-width: 100%;
+}
+figure {
+  margin: 0.5em 0;
+  padding: 0;
+  & blockquote {
+    margin: 0.8em 0.4em 0.4em;
+  }
+}
+figcaption, caption {
+  font-style: italic;
+  margin: 0.5em 1.5em;
+  text-align: left;
+  caption-side: bottom;
+}
+@media screen {
+  /* Auto-collapse boilerplate. */
+  :is(#status-of-memo, #copyright) {
+    & p {
+      margin: -2px 0;
+      max-height: 0;
+      transition: max-height 2s ease, margin 0.5s ease 0.5s;
+      overflow: hidden;
+    }
+    &:hover p,
+    & h2:target ~ p {
+      margin: 0.5em 0;
+      max-height: 500px;
+      overflow: auto;
+    }
+  }
+  pre, svg {
+    display: inline-block;
+    /* In the horizontal direction, sometimes people make over-sized figures.
+       Scrollbars for those is therefore necessary: auto adds them as necessary..
+       In the vertical direction, the line-height can combine with the font
+       asender/descender height to produce scrollbars: hidden avoids that. */
+    overflow: auto hidden;
+  }
+  pre {
+    max-width: 100%;
+    width: calc(100% - 22px - 1em);
+  }
+  svg {
+    max-width: calc(100% - 22px - 1em);
+  }
+  figure pre {
+    display: block;
+    width: calc(100% - 25px);
+  }
+  :is(pre, svg) + .pilcrow {
+    display: inline-block;
+    vertical-align: text-bottom;
+    padding-bottom: 8px;
+  }
+}
+
+/* aside, blockquote */
+aside, blockquote {
+  margin-left: 0;
+  padding: 0 2em;
+  font-style: italic;
+}
+blockquote {
+  margin: 1em 0;
+  border-left: 2px var(--pilcrow-strong) solid;
+}
+cite {
+  display: block;
+  text-align: right;
+  font-style: italic;
+}
+
+/* tables */
+table {
+  width: auto;
+  max-width: 100%;
+  margin: 0 0 1em;
+  border-collapse: collapse;
+  &.right { margin-left: auto; }
+  &.center { margin-left: auto; margin-right: auto; }
+  &.left { margin-right: auto; }
+  & .text-left { text-align: left; }
+  & .text-center { text-align: center; }
+  & .text-right { text-align: right; }
+  & caption {
+    margin: 0;
+    padding: 3px 0 3px 1em;
+  }
+  & p { margin: 0; }
+}
+
+thead, tbody {
+  border: 1px solid var(--line-color);
+}
+th, td {
+  text-align: left;
+  vertical-align: top;
+  padding: 5px 10px;
+}
+th {
+  background-color: var(--line-color);
+}
+:is(tr:nth-child(2n), thead+tbody > tr:nth-child(2n+1)) > td {
+  background-color: var(--background-color);
+}
+:is(tr:nth-child(2n+1), thead+tbody > tr:nth-child(2n)) > td {
+  background-color: var(--highlight-color);
+}
+
+/* pilcrow */
+a.pilcrow {
+  margin-left: 3px;
+  opacity: 0.2;
+  user-select: none;
+  &[href] {
+    color: var(--pilcrow-weak);
+    &:hover { text-decoration: none; }
+  }
+  @media not print {
+    :hover > &, &:focus {
+      opacity: 1;
+    }
+    &[href]:hover {
+      color: var(--pilcrow-strong);
+      background-color: transparent;
+    }
+  }
+  @media print {
+    display: none;
+  }
+}
+
+/* misc */
+hr {
+  border: 0;
+  border-top: 1px solid var(--line-color);
+}
+.bcp14 {
+  font-variant: small-caps;
+  font-weight: 600;
+  font-size: var(--small-font-size);
+}
+.role {
+  font-variant: all-small-caps;
+}
+sub, sup {
+  line-height: 1;
+  font-size: 80%;
+}
+
+/* info block */
+#identifiers {
+  margin: 0;
+  font-size: var(--small-font-size);
+  line-height: 18px;
+  --identifier-width: 15ch;
+  & dt {
+    width: var(--identifier-width);
+    min-width: var(--identifier-width);
+    clear: left;
+    float: left;
+    text-align: right;
+    margin-right: 1ch;
+  }
+  & dd {
+    margin: 0;
+    margin-left: calc(1em + var(--identifier-width)) !important;
+    min-width: 5em;
+  }
+  & .authors {
+    & .author {
+      display: inline-block;
+      margin-right: 1.5em;
+    }
+    & .org {
+      font-style: italic;
+    }
+  }
+}
+
+/* The prepared/rendered info at the very bottom of the page */
+.docInfo {
+  color: #999;
+  font-size: 0.9em;
+  font-style: italic;
+  margin-top: 2em;
+  & .prepared {
+    float: right;
+  }
+}
+
+/* table of contents */
+#toc {
+  padding: 0.75em 0 2em 0;
+  margin-bottom: 1em;
+
+  & nav {
+    & ul {
+      margin: 0 0.5em 0 0;
+      padding: 0;
+      list-style: none;
+    }
+    & li {
+      line-height: 1.3em;
+      margin: 2px 0;
+      padding-left: 1.2em;
+      text-indent: -1.2em;
+    }
+  }
+  & a.xref {
+    white-space: normal;
+  }
+}
+
+.references {
+  & > dt {
+    text-align: right;
+    font-weight: bold;
+    min-width: 10ch;
+    margin-right: 1.5ch;
+    &:target::before {
+      content: "⇒";
+      margin: 0 10px 0 -25px;
+    }
+  }
+  & > dd {
+    margin-left: 12ch !important;
+    overflow: visible;
+    & .refInstance {
+      margin-bottom: 0.8em;
+    }
+    & .ascii {
+      margin-bottom: 0.25em;
+    }
+  }
+}
+
+#rfc\.index\.index + ul {
+  margin-left: 0;
+}
+
+/* authors */
+address.vcard {
+  font-style: normal;
+  max-width: 20em;
+  margin: 1em auto 1em 0;
+
+  & .nameRole {
+    font-weight: 700;
+    margin-left: 0;
+  }
+  & .label {
+    margin: 0.5em 0;
+  }
+  & .type {
+    display: none;
+  }
+  & .alternative-contact {
+    margin: 0.5em 0 0.25em 0;
+  }
+  & .non-ascii {
+    margin: 0 0 0 2em;
+  }
+  & div.left {
+    text-align: left;
+  }
+  & div.right {
+    text-align: right;
+  }
+}
+
+hr.addr {
+  border-top: 1px dashed;
+  margin: 0;
+  color: #ddd;
+  max-width: calc(100% - 16px);
+}
+@media (min-width: 500px) {
+  #authors-addresses {
+    & > section {
+      column-count: 2;
+      column-gap: 20px;
+    }
+    & > section > h2 {
+      column-span: all;
+    }
+    /* hack for break-inside: avoid-column */
+    & address {
+      display: inline-block;
+      break-inside: avoid-column;
+    }
+  }
+}
+
+/* Comments */
+.rfcEditorRemove {
+  & p:first-of-type {
+    font-style: italic;
+  }
+}
+.cref {
+  background-color: rgba(249, 232, 105, 0.3);
+  padding: 2px 4px;
+}
+.crefSource {
+  font-style: italic;
+}
+
+@media screen {
+  #toc {
+    & nav {
+      font-family: var(--font-title);
+      font-weight: 360;
+      & > ul { margin-bottom: 2em; }
+      & ul {
+        margin: 0 0 0 4px;
+        & :is(p, li) {
+          margin: 2px 0;
+        }
+      }
+    }
+    & a.toplink {
+      float: right;
+    }
+  }
+}
+@media not screen {
+  #toc a.toplink {
+    display: none;
+  }
+}
+
+
+/* TOC layout for smaller screens */
+@media screen and (max-width: 929px) {
+  #toc {
+    position: fixed;
+    z-index: 2;
+    top: 0;
+    right: 0;
+    padding: 1px 0 0 0;
+    margin: 0;
+    border-bottom: 1px solid #ccc;
+    opacity: 0.6;
+    & h2 {
+      margin: 0;
+      padding: 2px 0 2px 6px;
+      padding-right: 1em;
+      font-size: 18px;
+      line-height: 24px;
+      min-width: 190px;
+      text-align: right;
+      background-color: #444;
+      color: white;
+      cursor: pointer;
+      &::before { /* css hamburger */
+        float: right;
+        position: relative;
+        width: 1em;
+        height: 1px;
+        left: -164px;
+        margin: 8px 0 0 0;
+        background: white none repeat scroll 0 0;
+        box-shadow: 0 4px 0 0 white, 0 8px 0 0 white;
+        content: "";
+      }
+    }
+    & nav {
+      display: none;
+      background-color: var(--background-color);
+      padding: 0.5em 1em 1em;
+      overflow: auto;
+      overscroll-behavior: contain;
+      height: calc(100vh - 48px);
+      border-left: 1px solid #ddd;
+    }
+    &.active {
+      opacity: 1;
+      & nav { display: block; }
+    }
+    /* Make the collapsed ToC header render white on gray also when it's a link */
+    & h2 a,
+    & h2 a:is(:link, :focus, :hover),
+    & a.toplink,
+    & a.toplink:hover {
+      color: white;
+      background-color: #444;
+      text-decoration: none;
+    }
+    & a.toplink {
+      margin: 2px 0.5em 0;
+    }
+  }
+}
+
+/* TOC layout for wide screens */
+@media screen and (min-width: 930px) {
+  body {
+    padding-right: 360px;
+    padding-right: calc(min(180px + 20%, 500px));
+  }
+  #toc {
+    position: fixed;
+    bottom: 0;
+    right: 0;
+    right: calc(50vw - 480px);
+    width: 312px;
+    margin: 0;
+    padding: 0;
+    z-index: 1;
+    & h2 {
+      margin: 0;
+      padding: 0.25em 1em 1em 0;
+    }
+    & nav {
+      display: block;
+      height: calc(90vh - 84px);
+      bottom: 0;
+      padding: 0.5em 0 2em;
+      overflow: auto;
+      overscroll-behavior: contain;
+      scrollbar-width: thin;
+    }
+    & a.toplink {
+      margin: 8px 0.5em 0;
+    }
+  }
+  img { /* future proofing */
+    max-width: 100%;
+    height: auto;
+  }
+}
+
+/* pagination */
+@media print {
+  body {
+    width: 100%;
+  }
+  p {
+    orphans: 3;
+    widows: 3;
+  }
+  #n-copyright-notice {
+    border-bottom: none;
+  }
+  #toc {
+    page-break-before: always;
+    border-top: none;
+    padding-top: 0;
+  }
+  #n-introduction {
+    page-break-before: always;
+  }
+  figure, pre, .vcard {
+    page-break-inside: avoid;
+  }
+  h1, h2, h3, h4, h5, h6 {
+    page-break-after: avoid;
+  }
+  :is(h2, h3, h4, h5, h6)+*, dd {
+    page-break-before: avoid;
+  }
+  pre {
+    white-space: pre-wrap;
+    word-wrap: break-word;
+    font-size: 10pt;
+  }
+  table {
+    border: 1px solid #ddd;
+  }
+  td {
+    border-top: 1px solid #ddd;
+  }
+}
+
+@page :first {
+  padding-top: 0;
+  @top-left {
+    content: normal;
+    border: none;
+  }
+  @top-center {
+    content: normal;
+    border: none;
+  }
+  @top-right {
+    content: normal;
+    border: none;
+  }
+}
+
+@page {
+  size: A4;
+  margin-bottom: 45mm;
+  padding-top: 20px;
+}
+
+/* Dark mode. */
+@media (prefers-color-scheme: dark) {
+:root {
+  --background-color: #121212;
+  --text-color: #f0f0f0;
+  --title-color: #fff;
+  --link-color: #4da4f0;
+  --highlight-color: #282828;
+  --line-color: #444;
+  --pilcrow-weak: #444;
+  --pilcrow-strong: #666;
+  scrollbar-color: #777 #333;
+}
+}
+
+/* SVG Trick: a prefix match works because only black and white are allowed */
+svg {
+  & :is([stroke="black"], [stroke^="#000"]) {
+    stroke: var(--text-color);
+  }
+  & :is([stroke="white"], [stroke^="#fff"]) {
+    stroke: var(--background-color);
+  }
+  & :is([fill="black"], [fill^="#000"], :not([fill], [fill] *)) {
+    fill: var(--text-color);
+  }
+  & :is([fill="white"], [fill^="#fff"]) {
+    fill: var(--background-color);
+  }
+}
+</style>
+
+</head>
+<body class="xml2rfc">
+<table class="ears">
+<thead><tr>
+<td class="left">Internet-Draft</td>
+<td class="center">MOQT Relay Diagnostics</td>
+<td class="right">November 2026</td>
+</tr></thead>
+<tfoot><tr>
+<td class="left">Bisht</td>
+<td class="center">Expires 22 May 2027</td>
+<td class="right">[Page]</td>
+</tr></tfoot>
+</table>
+<div id="external-metadata" class="document-information"></div>
+<div id="internal-metadata" class="document-information">
+<dl id="identifiers">
+<dt class="label-workgroup">Workgroup:</dt>
+<dd class="workgroup">Network Working Group</dd>
+<dt class="label-internet-draft">Internet-Draft:</dt>
+<dd class="internet-draft">draft-altanai-moq-relay-diagnostics-latest</dd>
+<dt class="label-published">Published:</dt>
+<dd class="published">
+<time datetime="2026-11-18" class="published">18 November 2026</time>
+    </dd>
+<dt class="label-intended-status">Intended Status:</dt>
+<dd class="intended-status">Informational</dd>
+<dt class="label-expires">Expires:</dt>
+<dd class="expires"><time datetime="2027-05-22">22 May 2027</time></dd>
+<dt class="label-authors">Author:</dt>
+<dd class="authors">
+<div class="author">
+      <div class="author-name">A. Bisht</div>
+<div class="org">Cisco</div>
+</div>
+</dd>
+</dl>
+</div>
+<h1 id="title">Relay Diagnostics for Media over QUIC Transport (MOQT)</h1>
+<section id="section-abstract">
+      <h2 id="abstract"><a href="#abstract" class="selfRef">Abstract</a></h2>
+<p id="section-abstract-1">Media over QUIC Transport (MOQT) deployments typically place one or more relays between publishers and subscribers. When delivery stalls, degrades, or fails, a client observes only its own leg of the path, and often cannot determine whether the cause lies with the original publisher, an intermediate relay, path conditions, authorization policy, or its own behavior.<a href="#section-abstract-1" class="pilcrow">¶</a></p>
+<p id="section-abstract-2">This document collects use cases and requirements for exposing a limited, relay-controlled set of diagnostic information to authorized MOQT clients. It examines three candidate mechanisms: an explicit request and response exchange on the control path, diagnostic information carried in existing responses and error codes, and advertisement of diagnostic capability during session establishment. Because such information can reveal deployment topology, operational state, or the activity of other users, authorization, data minimization, and relay discretion over what is disclosed are treated as first-order requirements rather than later refinements.<a href="#section-abstract-2" class="pilcrow">¶</a></p>
+<p id="section-abstract-3">Related operator examples describe capacity and incident observations within a separately authorized administrative scope. They motivate correlation with existing metrics and logging systems without defining a relay management API.<a href="#section-abstract-3" class="pilcrow">¶</a></p>
+<p id="section-abstract-4">The goal is diagnostics that are actionable at runtime and interoperable across implementations, not a general-purpose telemetry channel within MOQT. Information intended primarily for offline analysis remains the province of logging and observability systems such as qlog. This document defines the problem space and the design constraints; a concrete wire format is left to a follow-on document once the working group has settled on an approach.<a href="#section-abstract-4" class="pilcrow">¶</a></p>
+</section>
+<div id="status-of-memo">
+<section id="section-boilerplate.1">
+        <h2 id="name-status-of-this-memo">
+<a href="#name-status-of-this-memo" class="section-name selfRef">Status of This Memo</a>
+        </h2>
+<p id="section-boilerplate.1-1">
+        This Internet-Draft is submitted in full conformance with the
+        provisions of BCP 78 and BCP 79.<a href="#section-boilerplate.1-1" class="pilcrow">¶</a></p>
+<p id="section-boilerplate.1-2">
+        Internet-Drafts are working documents of the Internet Engineering Task
+        Force (IETF). Note that other groups may also distribute working
+        documents as Internet-Drafts. The list of current Internet-Drafts is
+        at <span><a href="https://datatracker.ietf.org/drafts/current/">https://datatracker.ietf.org/drafts/current/</a></span>.<a href="#section-boilerplate.1-2" class="pilcrow">¶</a></p>
+<p id="section-boilerplate.1-3">
+        Internet-Drafts are draft documents valid for a maximum of six months
+        and may be updated, replaced, or obsoleted by other documents at any
+        time. It is inappropriate to use Internet-Drafts as reference
+        material or to cite them other than as "work in progress."<a href="#section-boilerplate.1-3" class="pilcrow">¶</a></p>
+<p id="section-boilerplate.1-4">
+        This Internet-Draft will expire on 22 May 2027.<a href="#section-boilerplate.1-4" class="pilcrow">¶</a></p>
+</section>
+</div>
+<div id="copyright">
+<section id="section-boilerplate.2">
+        <h2 id="name-copyright-notice">
+<a href="#name-copyright-notice" class="section-name selfRef">Copyright Notice</a>
+        </h2>
+<p id="section-boilerplate.2-1">
+            Copyright (c) 2026 IETF Trust and the persons identified as the
+            document authors. All rights reserved.<a href="#section-boilerplate.2-1" class="pilcrow">¶</a></p>
+<p id="section-boilerplate.2-2">
+            This document is subject to BCP 78 and the IETF Trust's Legal
+            Provisions Relating to IETF Documents
+            (<span><a href="https://trustee.ietf.org/license-info">https://trustee.ietf.org/license-info</a></span>) in effect on the date of
+            publication of this document. Please review these documents
+            carefully, as they describe your rights and restrictions with
+            respect to this document. Code Components extracted from this
+            document must include Revised BSD License text as described in
+            Section 4.e of the Trust Legal Provisions and are provided without
+            warranty as described in the Revised BSD License.<a href="#section-boilerplate.2-2" class="pilcrow">¶</a></p>
+</section>
+</div>
+<div id="toc">
+<section id="section-toc.1">
+        <a href="#" onclick="scroll(0,0)" class="toplink">▲</a><h2 id="name-table-of-contents">
+<a href="#name-table-of-contents" class="section-name selfRef">Table of Contents</a>
+        </h2>
+<nav class="toc"><ul class="compact toc ulBare ulEmpty">
+<li class="compact toc ulBare ulEmpty" id="section-toc.1-1.1">
+            <p id="section-toc.1-1.1.1"><a href="#section-1" class="auto internal xref">1</a>.  <a href="#name-introduction" class="internal xref">Introduction</a></p>
+<ul class="compact toc ulBare ulEmpty">
+<li class="compact toc ulBare ulEmpty" id="section-toc.1-1.1.2.1">
+                <p id="section-toc.1-1.1.2.1.1" class="keepWithNext"><a href="#section-1.1" class="auto internal xref">1.1</a>.  <a href="#name-note-to-readers" class="internal xref">Note to Readers</a></p>
+</li>
+              <li class="compact toc ulBare ulEmpty" id="section-toc.1-1.1.2.2">
+                <p id="section-toc.1-1.1.2.2.1" class="keepWithNext"><a href="#section-1.2" class="auto internal xref">1.2</a>.  <a href="#name-conventions" class="internal xref">Conventions</a></p>
+</li>
+              <li class="compact toc ulBare ulEmpty" id="section-toc.1-1.1.2.3">
+                <p id="section-toc.1-1.1.2.3.1" class="keepWithNext"><a href="#section-1.3" class="auto internal xref">1.3</a>.  <a href="#name-terminology" class="internal xref">Terminology</a></p>
+</li>
+            </ul>
+</li>
+          <li class="compact toc ulBare ulEmpty" id="section-toc.1-1.2">
+            <p id="section-toc.1-1.2.1"><a href="#section-2" class="auto internal xref">2</a>.  <a href="#name-problem-statement" class="internal xref">Problem Statement</a></p>
+</li>
+          <li class="compact toc ulBare ulEmpty" id="section-toc.1-1.3">
+            <p id="section-toc.1-1.3.1"><a href="#section-3" class="auto internal xref">3</a>.  <a href="#name-use-cases" class="internal xref">Use Cases</a></p>
+<ul class="compact toc ulBare ulEmpty">
+<li class="compact toc ulBare ulEmpty" id="section-toc.1-1.3.2.1">
+                <p id="section-toc.1-1.3.2.1.1"><a href="#section-3.1" class="auto internal xref">3.1</a>.  <a href="#name-distinguishing-a-local-requ" class="internal xref">Distinguishing a Local Request Outcome</a></p>
+</li>
+              <li class="compact toc ulBare ulEmpty" id="section-toc.1-1.3.2.2">
+                <p id="section-toc.1-1.3.2.2.1"><a href="#section-3.2" class="auto internal xref">3.2</a>.  <a href="#name-diagnosing-a-delivery-stall" class="internal xref">Diagnosing a Delivery Stall</a></p>
+</li>
+              <li class="compact toc ulBare ulEmpty" id="section-toc.1-1.3.2.3">
+                <p id="section-toc.1-1.3.2.3.1"><a href="#section-3.3" class="auto internal xref">3.3</a>.  <a href="#name-explaining-a-relay-decision" class="internal xref">Explaining a Relay Decision</a></p>
+</li>
+              <li class="compact toc ulBare ulEmpty" id="section-toc.1-1.3.2.4">
+                <p id="section-toc.1-1.3.2.4.1"><a href="#section-3.4" class="auto internal xref">3.4</a>.  <a href="#name-supporting-an-operator-assi" class="internal xref">Supporting an Operator-Assisted Incident</a></p>
+</li>
+              <li class="compact toc ulBare ulEmpty" id="section-toc.1-1.3.2.5">
+                <p id="section-toc.1-1.3.2.5.1"><a href="#section-3.5" class="auto internal xref">3.5</a>.  <a href="#name-learning-whether-diagnostic" class="internal xref">Learning Whether Diagnostics Are Available</a></p>
+</li>
+            </ul>
+</li>
+          <li class="compact toc ulBare ulEmpty" id="section-toc.1-1.4">
+            <p id="section-toc.1-1.4.1"><a href="#section-4" class="auto internal xref">4</a>.  <a href="#name-illustrative-diagnostic-obs" class="internal xref">Illustrative Diagnostic Observations</a></p>
+<ul class="compact toc ulBare ulEmpty">
+<li class="compact toc ulBare ulEmpty" id="section-toc.1-1.4.2.1">
+                <p id="section-toc.1-1.4.2.1.1"><a href="#section-4.1" class="auto internal xref">4.1</a>.  <a href="#name-counting-and-measurement-sc" class="internal xref">Counting and Measurement Scope</a></p>
+</li>
+              <li class="compact toc ulBare ulEmpty" id="section-toc.1-1.4.2.2">
+                <p id="section-toc.1-1.4.2.2.1"><a href="#section-4.2" class="auto internal xref">4.2</a>.  <a href="#name-example-and-disclosure-limi" class="internal xref">Example and Disclosure Limits</a></p>
+</li>
+            </ul>
+</li>
+          <li class="compact toc ulBare ulEmpty" id="section-toc.1-1.5">
+            <p id="section-toc.1-1.5.1"><a href="#section-5" class="auto internal xref">5</a>.  <a href="#name-operator-diagnostics-at-ope" class="internal xref">Operator Diagnostics at Operational Scale</a></p>
+<ul class="compact toc ulBare ulEmpty">
+<li class="compact toc ulBare ulEmpty" id="section-toc.1-1.5.2.1">
+                <p id="section-toc.1-1.5.2.1.1"><a href="#section-5.1" class="auto internal xref">5.1</a>.  <a href="#name-aggregation-and-access-boun" class="internal xref">Aggregation and Access Boundaries</a></p>
+</li>
+            </ul>
+</li>
+          <li class="compact toc ulBare ulEmpty" id="section-toc.1-1.6">
+            <p id="section-toc.1-1.6.1"><a href="#section-6" class="auto internal xref">6</a>.  <a href="#name-requirements" class="internal xref">Requirements</a></p>
+<ul class="compact toc ulBare ulEmpty">
+<li class="compact toc ulBare ulEmpty" id="section-toc.1-1.6.2.1">
+                <p id="section-toc.1-1.6.2.1.1"><a href="#section-6.1" class="auto internal xref">6.1</a>.  <a href="#name-diagnostic-scope" class="internal xref">Diagnostic Scope</a></p>
+</li>
+              <li class="compact toc ulBare ulEmpty" id="section-toc.1-1.6.2.2">
+                <p id="section-toc.1-1.6.2.2.1"><a href="#section-6.2" class="auto internal xref">6.2</a>.  <a href="#name-privacy-and-authorization" class="internal xref">Privacy and Authorization</a></p>
+</li>
+              <li class="compact toc ulBare ulEmpty" id="section-toc.1-1.6.2.3">
+                <p id="section-toc.1-1.6.2.3.1"><a href="#section-6.3" class="auto internal xref">6.3</a>.  <a href="#name-safety-and-operational-beha" class="internal xref">Safety and Operational Behavior</a></p>
+</li>
+            </ul>
+</li>
+          <li class="compact toc ulBare ulEmpty" id="section-toc.1-1.7">
+            <p id="section-toc.1-1.7.1"><a href="#section-7" class="auto internal xref">7</a>.  <a href="#name-candidate-mechanisms" class="internal xref">Candidate Mechanisms</a></p>
+<ul class="compact toc ulBare ulEmpty">
+<li class="compact toc ulBare ulEmpty" id="section-toc.1-1.7.2.1">
+                <p id="section-toc.1-1.7.2.1.1"><a href="#section-7.1" class="auto internal xref">7.1</a>.  <a href="#name-explicit-request-and-respon" class="internal xref">Explicit Request and Response on the Control Path</a></p>
+</li>
+              <li class="compact toc ulBare ulEmpty" id="section-toc.1-1.7.2.2">
+                <p id="section-toc.1-1.7.2.2.1"><a href="#section-7.2" class="auto internal xref">7.2</a>.  <a href="#name-diagnostic-information-in-e" class="internal xref">Diagnostic Information in Existing Responses and Error Codes</a></p>
+</li>
+              <li class="compact toc ulBare ulEmpty" id="section-toc.1-1.7.2.3">
+                <p id="section-toc.1-1.7.2.3.1"><a href="#section-7.3" class="auto internal xref">7.3</a>.  <a href="#name-capability-advertisement-du" class="internal xref">Capability Advertisement During Session Establishment</a></p>
+</li>
+            </ul>
+</li>
+          <li class="compact toc ulBare ulEmpty" id="section-toc.1-1.8">
+            <p id="section-toc.1-1.8.1"><a href="#section-8" class="auto internal xref">8</a>.  <a href="#name-relationship-to-other-work" class="internal xref">Relationship to Other Work</a></p>
+</li>
+          <li class="compact toc ulBare ulEmpty" id="section-toc.1-1.9">
+            <p id="section-toc.1-1.9.1"><a href="#section-9" class="auto internal xref">9</a>.  <a href="#name-security-considerations" class="internal xref">Security Considerations</a></p>
+</li>
+          <li class="compact toc ulBare ulEmpty" id="section-toc.1-1.10">
+            <p id="section-toc.1-1.10.1"><a href="#section-10" class="auto internal xref">10</a>. <a href="#name-iana-considerations" class="internal xref">IANA Considerations</a></p>
+</li>
+          <li class="compact toc ulBare ulEmpty" id="section-toc.1-1.11">
+            <p id="section-toc.1-1.11.1"><a href="#section-11" class="auto internal xref">11</a>. <a href="#name-references" class="internal xref">References</a></p>
+<ul class="compact toc ulBare ulEmpty">
+<li class="compact toc ulBare ulEmpty" id="section-toc.1-1.11.2.1">
+                <p id="section-toc.1-1.11.2.1.1"><a href="#section-11.1" class="auto internal xref">11.1</a>.  <a href="#name-normative-references" class="internal xref">Normative References</a></p>
+</li>
+              <li class="compact toc ulBare ulEmpty" id="section-toc.1-1.11.2.2">
+                <p id="section-toc.1-1.11.2.2.1"><a href="#section-11.2" class="auto internal xref">11.2</a>.  <a href="#name-informative-references" class="internal xref">Informative References</a></p>
+</li>
+            </ul>
+</li>
+          <li class="compact toc ulBare ulEmpty" id="section-toc.1-1.12">
+            <p id="section-toc.1-1.12.1"><a href="#appendix-A" class="auto internal xref"></a><a href="#name-acknowledgments" class="internal xref">Acknowledgments</a></p>
+</li>
+          <li class="compact toc ulBare ulEmpty" id="section-toc.1-1.13">
+            <p id="section-toc.1-1.13.1"><a href="#appendix-B" class="auto internal xref"></a><a href="#name-authors-address" class="internal xref">Author's Address</a></p>
+</li>
+        </ul>
+</nav>
+</section>
+</div>
+<div id="introduction">
+<section id="section-1">
+      <h2 id="name-introduction">
+<a href="#section-1" class="section-number selfRef">1. </a><a href="#name-introduction" class="section-name selfRef">Introduction</a>
+      </h2>
+<p id="section-1-1">Media over QUIC Transport (MOQT) <span>[<a href="#MoQTransport" class="cite xref">MoQTransport</a>]</span> distributes media through a
+publish/subscribe model in which relays sit between publishers and subscribers.
+A subscriber therefore terminates only the last hop of a multi-hop path, and the
+signals available to it locally are rarely sufficient to explain why delivery is
+degraded or has failed.<a href="#section-1-1" class="pilcrow">¶</a></p>
+<p id="section-1-2">The term "diagnostics" comes from <span>[<a href="#Issue1692" class="cite xref">Issue1692</a>]</span>, which asks how a client can
+get diagnostic data from a relay. Discussion following IETF 126 helped
+shape the use cases and requirements for any future wire format.<a href="#section-1-2" class="pilcrow">¶</a></p>
+<div id="note-to-readers">
+<section id="section-1.1">
+        <h3 id="name-note-to-readers">
+<a href="#section-1.1" class="section-number selfRef">1.1. </a><a href="#name-note-to-readers" class="section-name selfRef">Note to Readers</a>
+        </h3>
+<p id="section-1.1-1">This revision is a problem statement and requirements document. It defines no
+protocol elements. Comments are welcome on the MOQ working group mailing list.<a href="#section-1.1-1" class="pilcrow">¶</a></p>
+</section>
+</div>
+<div id="conventions">
+<section id="section-1.2">
+        <h3 id="name-conventions">
+<a href="#section-1.2" class="section-number selfRef">1.2. </a><a href="#name-conventions" class="section-name selfRef">Conventions</a>
+        </h3>
+<p id="section-1.2-1">The key words "<span class="bcp14">MUST</span>", "<span class="bcp14">MUST NOT</span>", "<span class="bcp14">REQUIRED</span>", "<span class="bcp14">SHALL</span>", "<span class="bcp14">SHALL NOT</span>", "<span class="bcp14">SHOULD</span>", "<span class="bcp14">SHOULD NOT</span>", "<span class="bcp14">RECOMMENDED</span>", "<span class="bcp14">NOT RECOMMENDED</span>",
+"<span class="bcp14">MAY</span>", and "<span class="bcp14">OPTIONAL</span>" in this document are to be interpreted as
+described in BCP 14 <span>[<a href="#RFC2119" class="cite xref">RFC2119</a>]</span> <span>[<a href="#RFC8174" class="cite xref">RFC8174</a>]</span> when, and only when, they
+appear in all capitals, as shown here.<a href="#section-1.2-1" class="pilcrow">¶</a></p>
+</section>
+</div>
+<div id="terminology">
+<section id="section-1.3">
+        <h3 id="name-terminology">
+<a href="#section-1.3" class="section-number selfRef">1.3. </a><a href="#name-terminology" class="section-name selfRef">Terminology</a>
+        </h3>
+<p id="section-1.3-1">A <strong>client-visible relay diagnostic</strong> is a limited report of what one relay
+observed or did while handling a particular request. For example, when a
+subscription stalls, the relay may report that it handed Objects to its
+outgoing transport for that subscription. Whether those Objects reached the
+subscriber or why playback stalled may remain unknown. This document uses
+<strong>operator telemetry</strong> for the metrics, logs, and traces used to understand
+relay or service behavior within an authorized administrative scope.<a href="#section-1.3-1" class="pilcrow">¶</a></p>
+<p id="section-1.3-2">The transport roles follow <span>[<a href="#MoQTransport" class="cite xref">MoQTransport</a>]</span>.<a href="#section-1.3-2" class="pilcrow">¶</a></p>
+<ul class="normal">
+<li class="normal" id="section-1.3-3.1">
+            <p id="section-1.3-3.1.1">A <strong>publisher</strong> publishes a Track and sends its Objects to a subscriber.<a href="#section-1.3-3.1.1" class="pilcrow">¶</a></p>
+</li>
+          <li class="normal" id="section-1.3-3.2">
+            <p id="section-1.3-3.2.1">A <strong>subscriber</strong> requests or accepts delivery of Objects from a Track.<a href="#section-1.3-3.2.1" class="pilcrow">¶</a></p>
+</li>
+          <li class="normal" id="section-1.3-3.3">
+            <p id="section-1.3-3.3.1">A <strong>relay</strong> terminates MOQT sessions and forwards Objects between peers. It
+can act as a subscriber upstream and as a publisher downstream, and may
+cache Objects.<a href="#section-1.3-3.3.1" class="pilcrow">¶</a></p>
+</li>
+        </ul>
+<p id="section-1.3-4">This document uses the following operational roles.<a href="#section-1.3-4" class="pilcrow">¶</a></p>
+<ul class="normal">
+<li class="normal" id="section-1.3-5.1">
+            <p id="section-1.3-5.1.1">A <strong>relay operator</strong> runs a relay or a fleet of relays.<a href="#section-1.3-5.1.1" class="pilcrow">¶</a></p>
+</li>
+          <li class="normal" id="section-1.3-5.2">
+            <p id="section-1.3-5.2.1">A <strong>service operator</strong> operates a delivery service and uses authorized
+telemetry to assess delivery or investigate user reports.<a href="#section-1.3-5.2.1" class="pilcrow">¶</a></p>
+</li>
+          <li class="normal" id="section-1.3-5.3">
+            <p id="section-1.3-5.3.1">A <strong>tenant operator</strong> administers delivery for a tenant and can see the
+observations authorized for that tenant.<a href="#section-1.3-5.3.1" class="pilcrow">¶</a></p>
+</li>
+          <li class="normal" id="section-1.3-5.4">
+            <p id="section-1.3-5.4.1">A <strong>telemetry collector</strong> is a system that receives or retrieves metrics,
+logs, or traces for an operator. When it subscribes to a MOQT telemetry
+Track, it acts as a subscriber for that Track.<a href="#section-1.3-5.4.1" class="pilcrow">¶</a></p>
+</li>
+        </ul>
+<p id="section-1.3-6">An organization can fill several of these roles. For example, a service
+operator can run relays and publish content. Each role has its own scope of
+access under the deployment's policy.<a href="#section-1.3-6" class="pilcrow">¶</a></p>
+</section>
+</div>
+</section>
+</div>
+<div id="problem-statement">
+<section id="section-2">
+      <h2 id="name-problem-statement">
+<a href="#section-2" class="section-number selfRef">2. </a><a href="#name-problem-statement" class="section-name selfRef">Problem Statement</a>
+      </h2>
+<p id="section-2-1">MOQT clients observe only their own sessions and cannot reliably determine why delivery stalls or fails across a relay chain. An authorized client needs a small, request-scoped account of what its relay observed and did, sufficient to guide waiting, retrying, or reporting a problem. That account can be incomplete and cannot establish end-to-end delivery or identify causes outside the relay's knowledge. Disclosure must protect other clients, topology, cache state, and operational policy, while keeping diagnostic processing and query rates bounded.<a href="#section-2-1" class="pilcrow">¶</a></p>
+</section>
+</div>
+<div id="use-cases">
+<section id="section-3">
+      <h2 id="name-use-cases">
+<a href="#section-3" class="section-number selfRef">3. </a><a href="#name-use-cases" class="section-name selfRef">Use Cases</a>
+      </h2>
+<p id="section-3-1">The following use cases describe the question a client or operator wants to
+answer. They do not require a relay to disclose every fact that could help
+answer it. In each case, a relay may provide a coarse, request-scoped result,
+withhold details, or report that it cannot determine the cause.<a href="#section-3-1" class="pilcrow">¶</a></p>
+<div id="distinguishing-a-local-request-outcome">
+<section id="section-3.1">
+        <h3 id="name-distinguishing-a-local-requ">
+<a href="#section-3.1" class="section-number selfRef">3.1. </a><a href="#name-distinguishing-a-local-requ" class="section-name selfRef">Distinguishing a Local Request Outcome</a>
+        </h3>
+<p id="section-3.1-1">A subscriber issues a request for a track or a range of content and receives
+an error or observes no useful progress. The application needs to distinguish
+between a request that was rejected or could not be served at this relay and a
+request that was accepted but has not yet produced content. A useful answer
+might identify the outcome category and whether retrying the same request is
+likely to help. It need not expose the relay's policy rules, cache keys, or
+internal request identifiers.<a href="#section-3.1-1" class="pilcrow">¶</a></p>
+</section>
+</div>
+<div id="diagnosing-a-delivery-stall">
+<section id="section-3.2">
+        <h3 id="name-diagnosing-a-delivery-stall">
+<a href="#section-3.2" class="section-number selfRef">3.2. </a><a href="#name-diagnosing-a-delivery-stall" class="section-name selfRef">Diagnosing a Delivery Stall</a>
+        </h3>
+<p id="section-3.2-1">A subscriber has an active subscription, but expected objects are not arriving
+within the application's tolerance. The subscriber or its support tooling
+wants to know whether this relay has observed relevant upstream content, has
+forwarded content downstream, or cannot determine where progress stopped. A
+bounded summary for that subscriber's request can guide whether to wait, retry,
+change tracks, or collect local evidence. It should not reveal other
+subscribers, shared cache contents, or the identities of upstream peers.<a href="#section-3.2-1" class="pilcrow">¶</a></p>
+</section>
+</div>
+<div id="explaining-a-relay-decision">
+<section id="section-3.3">
+        <h3 id="name-explaining-a-relay-decision">
+<a href="#section-3.3" class="section-number selfRef">3.3. </a><a href="#name-explaining-a-relay-decision" class="section-name selfRef">Explaining a Relay Decision</a>
+        </h3>
+<p id="section-3.3-1">A relay may decline, defer, or limit work for a request because of its local
+authorization or resource policy. An authorized client wants an explanation
+that is actionable, such as whether the failure is likely to persist without
+a change in credentials or request parameters. A relay can communicate a
+coarse outcome without disclosing confidential policy thresholds, tenant
+configuration, load measurements, or details that would help an attacker tune
+requests around policy.<a href="#section-3.3-1" class="pilcrow">¶</a></p>
+</section>
+</div>
+<div id="supporting-an-operator-assisted-incident">
+<section id="section-3.4">
+        <h3 id="name-supporting-an-operator-assi">
+<a href="#section-3.4" class="section-number selfRef">3.4. </a><a href="#name-supporting-an-operator-assi" class="section-name selfRef">Supporting an Operator-Assisted Incident</a>
+        </h3>
+<p id="section-3.4-1">A subscriber reports a delivery problem to the service operator. A diagnostic
+summary for the subscriber's own request or a short-lived correlation value
+can help the service operator match the report to the relay's handling of that
+request. The value should be short-lived and refer only to the event, while
+the subscriber's access remains limited to its own request. More detailed
+logs may be available to the service operator through a separately
+authorized observability system.<a href="#section-3.4-1" class="pilcrow">¶</a></p>
+</section>
+</div>
+<div id="learning-whether-diagnostics-are-available">
+<section id="section-3.5">
+        <h3 id="name-learning-whether-diagnostic">
+<a href="#section-3.5" class="section-number selfRef">3.5. </a><a href="#name-learning-whether-diagnostic" class="section-name selfRef">Learning Whether Diagnostics Are Available</a>
+        </h3>
+<p id="section-3.5-1">A client may need to know whether a relay supports a diagnostic feature before
+requesting it. A capability indication can prevent unsupported requests, but
+it should reveal only the feature category needed for interoperability. It
+should not fingerprint a relay implementation or disclose deployment
+topology.<a href="#section-3.5-1" class="pilcrow">¶</a></p>
+</section>
+</div>
+</section>
+</div>
+<div id="illustrative-diagnostic-observations">
+<section id="section-4">
+      <h2 id="name-illustrative-diagnostic-obs">
+<a href="#section-4" class="section-number selfRef">4. </a><a href="#name-illustrative-diagnostic-obs" class="section-name selfRef">Illustrative Diagnostic Observations</a>
+      </h2>
+<p id="section-4-1">The following proposed metrics describe one client's existing, authorized
+request. Their names and semantics are starting points for discussion, not
+standardized MOQT fields, mandatory measurements, or a selected wire format.
+Counter and Gauge have the numeric meanings described in <span>[<a href="#MoQMetrics" class="cite xref">MoQMetrics</a>]</span>. A relay
+would disclose a metric only when it can attribute the observation to that
+request using bounded local state and its disclosure policy permits access.<a href="#section-4-1" class="pilcrow">¶</a></p>
+<table class="center" id="table-1">
+        <caption><a href="#table-1" class="selfRef">Table 1</a></caption>
+<thead>
+          <tr>
+            <th class="text-left" rowspan="1" colspan="1">Suggested metric</th>
+            <th class="text-left" rowspan="1" colspan="1">Proposed meaning</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td class="text-left" rowspan="1" colspan="1">
+              <code>request_objects_observed_total</code>
+</td>
+            <td class="text-left" rowspan="1" colspan="1">Cumulative number of distinct, complete data Objects accepted into this request's forwarding path after its filters and policy checks.</td>
+          </tr>
+          <tr>
+            <td class="text-left" rowspan="1" colspan="1">
+              <code>request_objects_forwarded_total</code>
+</td>
+            <td class="text-left" rowspan="1" colspan="1">Cumulative number of distinct, complete data Objects handed to the outgoing transport for this request. This local handoff does not establish client receipt, decoding, or playback.</td>
+          </tr>
+          <tr>
+            <td class="text-left" rowspan="1" colspan="1">
+              <code>request_queued_objects</code>
+</td>
+            <td class="text-left" rowspan="1" colspan="1">Complete, eligible Objects still held by this relay awaiting completion of transport handoff for this request, including any retained unsent portion of an Object. Excludes transport-internal buffering and shared cache inventory.</td>
+          </tr>
+          <tr>
+            <td class="text-left" rowspan="1" colspan="1">
+              <code>request_last_forward_age_seconds</code>
+</td>
+            <td class="text-left" rowspan="1" colspan="1">Monotonic elapsed time since the last complete-Object handoff for this request, rounded upward to a disclosed precision when policy requires. Omitted if no such handoff is known.</td>
+          </tr>
+        </tbody>
+      </table>
+<div id="counting-and-measurement-scope">
+<section id="section-4.1">
+        <h3 id="name-counting-and-measurement-sc">
+<a href="#section-4.1" class="section-number selfRef">4.1. </a><a href="#name-counting-and-measurement-sc" class="section-name selfRef">Counting and Measurement Scope</a>
+        </h3>
+<p id="section-4.1-1">The two Counters start at zero when observation begins for the request and
+increase within one measurement epoch. A restart, reset, or change of
+measurement scope starts a new epoch, distinguished by a short-lived,
+session-local value. A 10-second count is the difference between two samples
+from the same epoch; a <code>_total</code> value is not a rolling 10-second count.
+Samples from different epochs cannot be subtracted.<a href="#section-4.1-1" class="pilcrow">¶</a></p>
+<p id="section-4.1-2">The Counters use independent acceptance and handoff boundaries. An Object
+accepted before an epoch or comparison window can complete handoff inside it,
+incrementing only the forwarding Counter for that interval. Their difference
+is therefore not a balance and can be negative over a comparison window.<a href="#section-4.1-2" class="pilcrow">¶</a></p>
+<p id="section-4.1-3">An Object is identified within a request by its Full Track Name, Group ID,
+and Object ID, and contributes at most once to each Counter per epoch.
+Incomplete Objects, status markers, duplicates, and transport retransmissions
+do not increment these Counters. Cached Objects can count when accepted into
+or handed off for this request; the report does not identify their source or
+expose shared cache activity. A relay omits a metric if bounded attribution
+or duplicate suppression is unavailable, including under subscription
+aggregation.<a href="#section-4.1-3" class="pilcrow">¶</a></p>
+<p id="section-4.1-4">The queue Gauge can decrease when Objects expire or are discarded, as well
+as when they are handed off. The Counter difference therefore does not
+necessarily equal queue depth and does not establish packet loss or a cause.
+The age Gauge uses a local monotonic clock and discloses no exact event
+timestamp. For example, with upward rounding in 5-second steps, a scalar
+value of 5 means an age greater than zero and at most 5 seconds; an interval
+such as <code>[1, 5]</code> is not a numeric Gauge value.<a href="#section-4.1-4" class="pilcrow">¶</a></p>
+</section>
+</div>
+<div id="example-and-disclosure-limits">
+<section id="section-4.2">
+        <h3 id="name-example-and-disclosure-limi">
+<a href="#section-4.2" class="section-number selfRef">4.2. </a><a href="#name-example-and-disclosure-limi" class="section-name selfRef">Example and Disclosure Limits</a>
+        </h3>
+<p id="section-4.2-1">This conceptual report samples an epoch 10 seconds after observation began.
+Its Counter values are totals since that epoch began; later window counts
+would require comparable earlier samples. The age value is rounded upward
+in 5-second steps. All field names, epoch and precision metadata, and JSON
+encoding below are illustrative and carry no protocol allocation or
+interoperability requirement.<a href="#section-4.2-1" class="pilcrow">¶</a></p>
+<p id="section-4.2-2"><code>json
+{
+  "scope": "existing_request",
+  "measurement_epoch": "session-local-example",
+  "measurement_elapsed_seconds": 10,
+  "metrics": {
+    "request_objects_observed_total": 120,
+    "request_objects_forwarded_total": 117,
+    "request_queued_objects": 2,
+    "request_last_forward_age_seconds": 5
+  },
+  "age_rounding_seconds": 5,
+  "progress": "forwarding_observed",
+  "cause": "unknown",
+  "coverage": "partial"
+}
+</code><a href="#section-4.2-2" class="pilcrow">¶</a></p>
+<p id="section-4.2-3">Unsupported, unavailable, withheld, or unattributable measurements are omitted,
+not replaced with zero. Zero represents a measured zero, such as no handoff
+counted in this epoch. For the age Gauge, no known handoff means omission,
+not zero. Any indication of why a value is absent is also subject to
+disclosure policy. Approximate request-specific bytes forwarded or
+a coarse progress category, such as waiting or unknown, can supplement the
+four metrics without exposing peer identities or asserting an upstream cause.<a href="#section-4.2-3" class="pilcrow">¶</a></p>
+<p id="section-4.2-4">Reports exclude cache-hit status, topology, relay-wide load, and other users'
+activity. Query rates, processing, response size, and retention need limits;
+producing a measurement must not initiate upstream retrieval or subscriptions.
+The working group would need to agree these semantics, precision metadata,
+authorization and request binding, and any mapping to <span>[<a href="#MoQMetrics" class="cite xref">MoQMetrics</a>]</span> before
+implementations could claim interoperability.<a href="#section-4.2-4" class="pilcrow">¶</a></p>
+</section>
+</div>
+</section>
+</div>
+<div id="operator-diagnostics-at-operational-scale">
+<section id="section-5">
+      <h2 id="name-operator-diagnostics-at-ope">
+<a href="#section-5" class="section-number selfRef">5. </a><a href="#name-operator-diagnostics-at-ope" class="section-name selfRef">Operator Diagnostics at Operational Scale</a>
+      </h2>
+<p id="section-5-1">Relay operators use operational measurements to assess capacity and behavior
+across the relays they run. Service operators use authorized observations to
+assess service health and correlate user reports with local delivery events.
+The metrics below illustrate those administrative views. A telemetry
+collector can use <span>[<a href="#MoQMetrics" class="cite xref">MoQMetrics</a>]</span> data, <span>[<a href="#MoQLog" class="cite xref">MoQLog</a>]</span> records, <span>[<a href="#QLOG" class="cite xref">QLOG</a>]</span> traces, or
+deployment observability data within its authorized collection scope.<a href="#section-5-1" class="pilcrow">¶</a></p>
+<table class="center" id="table-2">
+        <caption><a href="#table-2" class="selfRef">Table 2</a></caption>
+<thead>
+          <tr>
+            <th class="text-left" rowspan="1" colspan="1">Suggested operator observation</th>
+            <th class="text-left" rowspan="1" colspan="1">Operational use and measurement scope</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td class="text-left" rowspan="1" colspan="1">
+              <code>relay_active_sessions</code>
+</td>
+            <td class="text-left" rowspan="1" colspan="1">Current established MOQT sessions at one relay; helps identify connection load and changes during draining.</td>
+          </tr>
+          <tr>
+            <td class="text-left" rowspan="1" colspan="1">
+              <code>relay_active_subscriptions</code>
+</td>
+            <td class="text-left" rowspan="1" colspan="1">Current established subscriptions at that relay; counts local subscription instances, not unique viewers or end-to-end subscriptions.</td>
+          </tr>
+          <tr>
+            <td class="text-left" rowspan="1" colspan="1">
+              <code>relay_requests_total</code>
+</td>
+            <td class="text-left" rowspan="1" colspan="1">Local request attempts reaching initial acceptance, rejection, timeout, or cancellation, counted once per attempt. Bounded labels distinguish request type, direction, and outcome; each retry is a separate attempt.</td>
+          </tr>
+          <tr>
+            <td class="text-left" rowspan="1" colspan="1">
+              <code>relay_queued_payload_bytes</code>
+</td>
+            <td class="text-left" rowspan="1" colspan="1">Unsent payload retained in relay-managed forwarding queues, counted per pending downstream delivery; measures delivery backlog rather than physical memory or transport-internal buffers.</td>
+          </tr>
+          <tr>
+            <td class="text-left" rowspan="1" colspan="1">
+              <code>relay_delivery_timeout_resets_total</code>
+</td>
+            <td class="text-left" rowspan="1" colspan="1">Locally initiated data-stream terminations for delivery timeout, counted once per stream; helps detect deadline pressure without treating every affected Object as a separate reset.</td>
+          </tr>
+          <tr>
+            <td class="text-left" rowspan="1" colspan="1">
+              <code>relay_cpu_utilization</code>
+</td>
+            <td class="text-left" rowspan="1" colspan="1">Process CPU consumption divided by available process CPU capacity over a disclosed sample interval; the interval and capacity basis accompany the observation.</td>
+          </tr>
+          <tr>
+            <td class="text-left" rowspan="1" colspan="1">
+              <code>relay_process_resident_memory_bytes</code>
+</td>
+            <td class="text-left" rowspan="1" colspan="1">Resident memory of the relay process, with collection method identified; useful for capacity assessment alongside queue and cache observations.</td>
+          </tr>
+          <tr>
+            <td class="text-left" rowspan="1" colspan="1">
+              <code>relay_cached_payload_bytes</code>
+</td>
+            <td class="text-left" rowspan="1" colspan="1">Total payload length of distinct cached Objects, counted once per Full Track Name, Group ID, and Object ID; excludes metadata and is not physical process memory.</td>
+          </tr>
+        </tbody>
+      </table>
+<p id="section-5-3">For example, a relay operator can investigate scheduling or downstream
+capacity when queue bytes and delivery-timeout resets rise together. A rise
+in failed upstream request attempts, observed where the relay acts as a
+requester, can guide examination of that relay's upstream connections. High
+CPU or resident memory with growing load can motivate capacity planning or
+draining. These are correlations to investigate, not proof of a cause or of
+the quality experienced by every viewer.<a href="#section-5-3" class="pilcrow">¶</a></p>
+<div id="aggregation-and-access-boundaries">
+<section id="section-5.1">
+        <h3 id="name-aggregation-and-access-boun">
+<a href="#section-5.1" class="section-number selfRef">5.1. </a><a href="#name-aggregation-and-access-boun" class="section-name selfRef">Aggregation and Access Boundaries</a>
+        </h3>
+<p id="section-5.1-1">Every operator sample needs an administrative scope, collection interval or
+capture time, freshness, and coverage. Counters have local measurement
+epochs; rates or window deltas are calculated per relay before aggregation
+so restarts are not mistaken for traffic changes. Gauges are combined only
+across disjoint scopes with compatible meanings. Fleet reports disclose
+missing or stale contributors instead of presenting partial coverage as a
+complete service view. Fleet CPU fractions are weighted by the disclosed
+capacity basis rather than summed. Capacity thresholds and alert policies remain
+deployment decisions.<a href="#section-5.1-1" class="pilcrow">¶</a></p>
+<p id="section-5.1-2">Operator authorization is role- and scope-specific. A tenant operator sees
+only that tenant's authorized observations; node-wide CPU, shared-cache
+inventory, or another tenant's activity needs separate permission. Collector
+access, retention, and incident correlation need auditing and access controls.
+Labels use bounded categories such as request type and outcome, avoiding
+tokens, user identifiers, full content names, or arbitrary peer addresses.
+Detailed logs or traces are retrieved only for an authorized, bounded
+incident context, with sensitive fields minimized. These operational views
+are not returned through an ordinary client's private diagnostic view.<a href="#section-5.1-2" class="pilcrow">¶</a></p>
+</section>
+</div>
+</section>
+</div>
+<div id="requirements">
+<section id="section-6">
+      <h2 id="name-requirements">
+<a href="#section-6" class="section-number selfRef">6. </a><a href="#name-requirements" class="section-name selfRef">Requirements</a>
+      </h2>
+<p id="section-6-1">These requirements describe design goals for a future mechanism. They do not
+specify MOQT messages or require relays to expose operational information.
+Requirements to identify an individual request or report from one relay apply
+to the client-visible view. Operator aggregates instead identify their
+administrative scope, contributing relays, coverage, and freshness as
+described above; they retain the applicable access and resource limits.<a href="#section-6-1" class="pilcrow">¶</a></p>
+<div id="diagnostic-scope">
+<section id="section-6.1">
+        <h3 id="name-diagnostic-scope">
+<a href="#section-6.1" class="section-number selfRef">6.1. </a><a href="#name-diagnostic-scope" class="section-name selfRef">Diagnostic Scope</a>
+        </h3>
+<ul class="normal">
+<li class="normal" id="section-6.1-1.1">
+            <p id="section-6.1-1.1.1">A mechanism needs to identify the request or delivery context to which a
+diagnostic applies, without requiring a stable identifier that can be used
+to correlate a client's activity across sessions.<a href="#section-6.1-1.1.1" class="pilcrow">¶</a></p>
+</li>
+          <li class="normal" id="section-6.1-1.2">
+            <p id="section-6.1-1.2.1">A diagnostic needs to distinguish, where the relay has sufficient evidence,
+between a relay-observed outcome and an unknown or unobserved cause.<a href="#section-6.1-1.2.1" class="pilcrow">¶</a></p>
+</li>
+          <li class="normal" id="section-6.1-1.3">
+            <p id="section-6.1-1.3.1">A mechanism needs to permit an implementation to return no diagnostic or a
+less detailed result when the relay lacks reliable evidence.<a href="#section-6.1-1.3.1" class="pilcrow">¶</a></p>
+</li>
+          <li class="normal" id="section-6.1-1.4">
+            <p id="section-6.1-1.4.1">A diagnostic needs to avoid implying facts about upstream endpoints or
+network segments that the reporting relay cannot observe.<a href="#section-6.1-1.4.1" class="pilcrow">¶</a></p>
+</li>
+        </ul>
+</section>
+</div>
+<div id="privacy-and-authorization">
+<section id="section-6.2">
+        <h3 id="name-privacy-and-authorization">
+<a href="#section-6.2" class="section-number selfRef">6.2. </a><a href="#name-privacy-and-authorization" class="section-name selfRef">Privacy and Authorization</a>
+        </h3>
+<ul class="normal">
+<li class="normal" id="section-6.2-1.1">
+            <p id="section-6.2-1.1.1">A relay needs to authenticate and authorize access to diagnostics according
+to its deployment's policy. A client authorized to request content is not
+automatically authorized to inspect general relay health or other clients'
+activity.<a href="#section-6.2-1.1.1" class="pilcrow">¶</a></p>
+</li>
+          <li class="normal" id="section-6.2-1.2">
+            <p id="section-6.2-1.2.1">Diagnostic responses need to be scoped to the requesting client's own
+session and request, except where a separately defined and authorized
+operator interface is used.<a href="#section-6.2-1.2.1" class="pilcrow">¶</a></p>
+</li>
+          <li class="normal" id="section-6.2-1.3">
+            <p id="section-6.2-1.3.1">Operator collection needs explicit administrative and tenant scope,
+role-based access, bounded retention, and auditability. Authorization for
+content delivery or a client diagnostic view does not grant operator access.<a href="#section-6.2-1.3.1" class="pilcrow">¶</a></p>
+</li>
+          <li class="normal" id="section-6.2-1.4">
+            <p id="section-6.2-1.4.1">A mechanism needs to support data minimization: disclose the least
+information useful for the stated diagnostic purpose, and allow the relay to
+omit sensitive fields.<a href="#section-6.2-1.4.1" class="pilcrow">¶</a></p>
+</li>
+          <li class="normal" id="section-6.2-1.5">
+            <p id="section-6.2-1.5.1">Diagnostics need not disclose relay topology, upstream identities, cache
+keys or contents, tenant names, policy rules, precise resource utilization,
+or information about other clients.<a href="#section-6.2-1.5.1" class="pilcrow">¶</a></p>
+</li>
+          <li class="normal" id="section-6.2-1.6">
+            <p id="section-6.2-1.6.1">Any correlation value needs to be scoped, short-lived, and difficult to use
+as a cross-session or cross-service tracking identifier.<a href="#section-6.2-1.6.1" class="pilcrow">¶</a></p>
+</li>
+          <li class="normal" id="section-6.2-1.7">
+            <p id="section-6.2-1.7.1">A client needs to be able to distinguish unsupported, unavailable, and
+withheld information where doing so does not itself create an unacceptable
+information leak. A mechanism can deliberately collapse these outcomes when
+policy requires it.<a href="#section-6.2-1.7.1" class="pilcrow">¶</a></p>
+</li>
+        </ul>
+</section>
+</div>
+<div id="safety-and-operational-behavior">
+<section id="section-6.3">
+        <h3 id="name-safety-and-operational-beha">
+<a href="#section-6.3" class="section-number selfRef">6.3. </a><a href="#name-safety-and-operational-beha" class="section-name selfRef">Safety and Operational Behavior</a>
+        </h3>
+<ul class="normal">
+<li class="normal" id="section-6.3-1.1">
+            <p id="section-6.3-1.1.1">A mechanism needs bounded response size and bounded processing cost.<a href="#section-6.3-1.1.1" class="pilcrow">¶</a></p>
+</li>
+          <li class="normal" id="section-6.3-1.2">
+            <p id="section-6.3-1.2.1">A relay needs discretion to rate-limit, defer, or refuse diagnostic requests
+without affecting ordinary content delivery.<a href="#section-6.3-1.2.1" class="pilcrow">¶</a></p>
+</li>
+          <li class="normal" id="section-6.3-1.3">
+            <p id="section-6.3-1.3.1">Diagnostic requests need to avoid causing new upstream subscriptions,
+cache fills, or other expensive work solely to generate a diagnostic.<a href="#section-6.3-1.3.1" class="pilcrow">¶</a></p>
+</li>
+          <li class="normal" id="section-6.3-1.4">
+            <p id="section-6.3-1.4.1">A diagnostic needs to be clearly identified as a point-in-time report from
+one relay. It may be incomplete, delayed, or based on an approximation.<a href="#section-6.3-1.4.1" class="pilcrow">¶</a></p>
+</li>
+          <li class="normal" id="section-6.3-1.5">
+            <p id="section-6.3-1.5.1">Diagnostics need not be enabled by default. Capability discovery and use
+should be compatible with deployments that choose not to expose them.<a href="#section-6.3-1.5.1" class="pilcrow">¶</a></p>
+</li>
+          <li class="normal" id="section-6.3-1.6">
+            <p id="section-6.3-1.6.1">Clients need to treat diagnostic information as advisory and continue to
+apply their own timeouts, retry limits, and security policy.<a href="#section-6.3-1.6.1" class="pilcrow">¶</a></p>
+</li>
+        </ul>
+</section>
+</div>
+</section>
+</div>
+<div id="candidate-mechanisms">
+<section id="section-7">
+      <h2 id="name-candidate-mechanisms">
+<a href="#section-7" class="section-number selfRef">7. </a><a href="#name-candidate-mechanisms" class="section-name selfRef">Candidate Mechanisms</a>
+      </h2>
+<div id="explicit-request-and-response-on-the-control-path">
+<section id="section-7.1">
+        <h3 id="name-explicit-request-and-respon">
+<a href="#section-7.1" class="section-number selfRef">7.1. </a><a href="#name-explicit-request-and-respon" class="section-name selfRef">Explicit Request and Response on the Control Path</a>
+        </h3>
+<p id="section-7.1-1">An explicit request lets a client ask for a diagnostic when a particular
+request is stalled or has failed. It can carry a request-scoped context and
+allow the relay to return a result only when asked. This avoids sending
+diagnostics for every request and gives the relay an opportunity to apply
+authorization and rate limits.<a href="#section-7.1-1" class="pilcrow">¶</a></p>
+<p id="section-7.1-2">The mechanism also adds a new request/response exchange and associated state.
+It needs rules for matching a diagnostic to a request, handling unavailable
+or withheld information, and preventing repeated queries from becoming a
+resource or probing attack. A diagnostic request must not trigger expensive
+upstream work solely to answer the query.<a href="#section-7.1-2" class="pilcrow">¶</a></p>
+</section>
+</div>
+<div id="diagnostic-information-in-existing-responses-and-error-codes">
+<section id="section-7.2">
+        <h3 id="name-diagnostic-information-in-e">
+<a href="#section-7.2" class="section-number selfRef">7.2. </a><a href="#name-diagnostic-information-in-e" class="section-name selfRef">Diagnostic Information in Existing Responses and Error Codes</a>
+        </h3>
+<p id="section-7.2-1">Adding a small diagnostic category to an existing response or error can make
+an outcome immediately actionable and avoid a separate round trip. It is a
+natural fit when the relay is already returning a result for the request.<a href="#section-7.2-1" class="pilcrow">¶</a></p>
+<p id="section-7.2-2">This approach is less suitable for later investigation of an ongoing stall,
+and risks turning response fields into a channel for detailed operational
+data. Error details may also be propagated or cached by relays. Any details
+would therefore need to remain compact, request-specific, privacy-preserving,
+and safe to forward or retain for the lifetime defined by the base protocol.<a href="#section-7.2-2" class="pilcrow">¶</a></p>
+</section>
+</div>
+<div id="capability-advertisement-during-session-establishment">
+<section id="section-7.3">
+        <h3 id="name-capability-advertisement-du">
+<a href="#section-7.3" class="section-number selfRef">7.3. </a><a href="#name-capability-advertisement-du" class="section-name selfRef">Capability Advertisement During Session Establishment</a>
+        </h3>
+<p id="section-7.3-1">Capability advertisement can tell a client whether a relay understands a
+diagnostic mechanism before the client uses it. It can support gradual
+deployment and avoid sending requests that cannot be understood.<a href="#section-7.3-1" class="pilcrow">¶</a></p>
+<p id="section-7.3-2">An advertisement says that a capability is supported; it does not authorize a
+particular client or guarantee that a relay will disclose a diagnostic for a
+particular request. Detailed capability lists can fingerprint implementations
+or deployments, so discovery should identify only the protocol feature needed
+for interoperability.<a href="#section-7.3-2" class="pilcrow">¶</a></p>
+<p id="section-7.3-3">The mechanisms are not necessarily exclusive. A later design could use
+capability discovery together with either an explicit query or compact
+response details. Selection requires working-group agreement on the target
+use cases and privacy model.<a href="#section-7.3-3" class="pilcrow">¶</a></p>
+</section>
+</div>
+</section>
+</div>
+<div id="relationship-to-other-work">
+<section id="section-8">
+      <h2 id="name-relationship-to-other-work">
+<a href="#section-8" class="section-number selfRef">8. </a><a href="#name-relationship-to-other-work" class="section-name selfRef">Relationship to Other Work</a>
+      </h2>
+<p id="section-8-1">This work concerns request-scoped explanations that can help an endpoint make
+a runtime decision or help a user report a problem. It is not a general
+metrics format, a relay management API, or a logging protocol.<a href="#section-8-1" class="pilcrow">¶</a></p>
+<p id="section-8-2"><span>[<a href="#MoQMetrics" class="cite xref">MoQMetrics</a>]</span> provides a numeric data model, live subscriptions, and retrieval
+of cached measurements. Its Counter and Gauge types are candidates for the
+observations illustrated here. The proposed request semantics, attribution,
+and disclosure rules would need an agreed mapping, including naming and
+authorization, rather than a competing metrics transport.<a href="#section-8-2" class="pilcrow">¶</a></p>
+<p id="section-8-3"><span>[<a href="#MoQLog" class="cite xref">MoQLog</a>]</span> provides structured operational logging over MOQT, while <span>[<a href="#QLOG" class="cite xref">QLOG</a>]</span>
+provides event representations useful for protocol analysis and incident
+correlation. Existing metrics, logs, and traces can support either audience
+when authorized. The operator examples here motivate reuse of those systems;
+they do not define a replacement collector, dashboard, or management API.<a href="#section-8-3" class="pilcrow">¶</a></p>
+<p id="section-8-4">The following are out of scope: exposing a relay's complete internal state;
+distributing network-wide or cross-tenant telemetry to ordinary clients;
+proving end-to-end delivery; standardizing operator dashboards; and defining
+a general-purpose query language for relay state.<a href="#section-8-4" class="pilcrow">¶</a></p>
+</section>
+</div>
+<div id="security-considerations">
+<section id="section-9">
+      <h2 id="name-security-considerations">
+<a href="#section-9" class="section-number selfRef">9. </a><a href="#name-security-considerations" class="section-name selfRef">Security Considerations</a>
+      </h2>
+<p id="section-9-1">Relay diagnostics create a deliberate information channel from a relay to a
+client. The channel can reveal operational state, deployment relationships,
+traffic patterns, and policy decisions. An attacker may use repeated or
+carefully varied requests to infer whether content is cached, whether another
+client is active, how a tenant is configured, or when a relay is under load.
+Even coarse fields can become identifying when combined with timing and
+client-side observations.<a href="#section-9-1" class="pilcrow">¶</a></p>
+<p id="section-9-2">A future protocol design should apply data minimization at the relay, not rely
+only on clients to protect received data. Diagnostics should be tied to the
+requesting client's authorization context and scoped to that client's own
+request. General relay health, cross-client statistics, and operator
+correlation should use separately authorized interfaces. Deployments may
+choose not to provide client-visible diagnostics or may provide only a small
+set of coarse outcomes.<a href="#section-9-2" class="pilcrow">¶</a></p>
+<p id="section-9-3">Operator observations need separately scoped authorization, tenant isolation,
+access auditing, and retention controls. Aggregation does not by itself make
+data anonymous, and small groups or repeated queries can still reveal an
+individual client's activity. Correlation with detailed logs or traces must
+remain within the operator's authorized incident scope.<a href="#section-9-3" class="pilcrow">¶</a></p>
+<p id="section-9-4">Implementations should avoid returning stable relay or client identifiers,
+precise timestamps, exact cache keys, upstream addresses, internal error text,
+or raw policy and resource measurements unless a separate, explicit trust
+model justifies them. Any event correlation value should be short-lived and
+non-reusable across sessions. A relay may deliberately make "unknown",
+"withheld", and "not available" indistinguishable if differentiating them
+would expose sensitive policy or state.<a href="#section-9-4" class="pilcrow">¶</a></p>
+<p id="section-9-5">Diagnostic queries can consume CPU, memory, or control-stream capacity, and
+may be abused to probe policy or amplify traffic. Responses and processing
+need limits; relays need rate limiting and discretion to refuse queries.
+Generating a diagnostic should not trigger content retrieval, cache filling,
+or upstream subscription work. Where diagnostic messages can be replayed,
+cached, or propagated by other relays, their scope and lifetime need to be
+defined so that one client's result is not disclosed to another.<a href="#section-9-5" class="pilcrow">¶</a></p>
+<p id="section-9-6">Clients should treat diagnostics as advisory, potentially incomplete
+observations. They should not infer that a named upstream component is at
+fault based solely on a relay response, and should not use the absence of a
+diagnostic as proof that delivery is healthy. Operators should consider the
+privacy of diagnostic data in logs, support tickets, and telemetry pipelines.<a href="#section-9-6" class="pilcrow">¶</a></p>
+</section>
+</div>
+<div id="iana-considerations">
+<section id="section-10">
+      <h2 id="name-iana-considerations">
+<a href="#section-10" class="section-number selfRef">10. </a><a href="#name-iana-considerations" class="section-name selfRef">IANA Considerations</a>
+      </h2>
+<p id="section-10-1">This document has no IANA actions.<a href="#section-10-1" class="pilcrow">¶</a></p>
+</section>
+</div>
+<div id="sec-combined-references">
+<section id="section-11">
+      <h2 id="name-references">
+<a href="#section-11" class="section-number selfRef">11. </a><a href="#name-references" class="section-name selfRef">References</a>
+      </h2>
+<div id="sec-normative-references">
+<section id="section-11.1">
+        <h3 id="name-normative-references">
+<a href="#section-11.1" class="section-number selfRef">11.1. </a><a href="#name-normative-references" class="section-name selfRef">Normative References</a>
+        </h3>
+<dl class="references">
+<dt id="RFC2119">[RFC2119]</dt>
+        <dd>
+<span class="refAuthor">Bradner, S.</span>, <span class="refTitle">"Key words for use in RFCs to Indicate Requirement Levels"</span>, <span class="seriesInfo">BCP 14</span>, <span class="seriesInfo">RFC 2119</span>, <span class="seriesInfo">DOI 10.17487/RFC2119</span>, <time datetime="1997-03" class="refDate">March 1997</time>, <span>&lt;<a href="https://www.rfc-editor.org/rfc/rfc2119">https://www.rfc-editor.org/rfc/rfc2119</a>&gt;</span>. </dd>
+<dd class="break"></dd>
+<dt id="RFC8174">[RFC8174]</dt>
+      <dd>
+<span class="refAuthor">Leiba, B.</span>, <span class="refTitle">"Ambiguity of Uppercase vs Lowercase in RFC 2119 Key Words"</span>, <span class="seriesInfo">BCP 14</span>, <span class="seriesInfo">RFC 8174</span>, <span class="seriesInfo">DOI 10.17487/RFC8174</span>, <time datetime="2017-05" class="refDate">May 2017</time>, <span>&lt;<a href="https://www.rfc-editor.org/rfc/rfc8174">https://www.rfc-editor.org/rfc/rfc8174</a>&gt;</span>. </dd>
+<dd class="break"></dd>
+</dl>
+</section>
+</div>
+<div id="sec-informative-references">
+<section id="section-11.2">
+        <h3 id="name-informative-references">
+<a href="#section-11.2" class="section-number selfRef">11.2. </a><a href="#name-informative-references" class="section-name selfRef">Informative References</a>
+        </h3>
+<dl class="references">
+<dt id="Issue1692">[Issue1692]</dt>
+        <dd>
+<span class="refTitle">"moq-transport issue #1692: client-visible relay diagnostics"</span>, <time datetime="2026" class="refDate">2026</time>, <span>&lt;<a href="https://github.com/moq-wg/moq-transport/issues/1692">https://github.com/moq-wg/moq-transport/issues/1692</a>&gt;</span>. </dd>
+<dd class="break"></dd>
+<dt id="MoQLog">[MoQLog]</dt>
+        <dd>
+<span class="refAuthor">Jennings, C.</span>, <span class="refTitle">"Logging over Media over QUIC Transport"</span>, <time datetime="2026" class="refDate">2026</time>, <span>&lt;<a href="https://datatracker.ietf.org/doc/draft-jennings-moq-log/">https://datatracker.ietf.org/doc/draft-jennings-moq-log/</a>&gt;</span>. </dd>
+<dd class="break"></dd>
+<dt id="MoQMetrics">[MoQMetrics]</dt>
+        <dd>
+<span class="refAuthor">Jennings, C.</span>, <span class="refTitle">"Metrics over MOQT"</span>, <time datetime="2026" class="refDate">2026</time>, <span>&lt;<a href="https://datatracker.ietf.org/doc/draft-jennings-moq-metrics/">https://datatracker.ietf.org/doc/draft-jennings-moq-metrics/</a>&gt;</span>. </dd>
+<dd class="break"></dd>
+<dt id="MoQTransport">[MoQTransport]</dt>
+        <dd>
+<span class="refAuthor">IETF MOQ WG</span>, <span class="refTitle">"Media over QUIC Transport"</span>, <time datetime="2026" class="refDate">2026</time>, <span>&lt;<a href="https://datatracker.ietf.org/doc/draft-ietf-moq-transport/">https://datatracker.ietf.org/doc/draft-ietf-moq-transport/</a>&gt;</span>. </dd>
+<dd class="break"></dd>
+<dt id="QLOG">[QLOG]</dt>
+      <dd>
+<span class="refAuthor">IETF QUIC WG</span>, <span class="refTitle">"Main Logging Schema for qlog"</span>, <time datetime="2026" class="refDate">2026</time>, <span>&lt;<a href="https://datatracker.ietf.org/doc/draft-ietf-quic-qlog-main-schema/">https://datatracker.ietf.org/doc/draft-ietf-quic-qlog-main-schema/</a>&gt;</span>. </dd>
+<dd class="break"></dd>
+</dl>
+</section>
+</div>
+</section>
+</div>
+<div id="acknowledgments">
+<section id="appendix-A">
+      <h2 id="name-acknowledgments">
+<a href="#name-acknowledgments" class="section-name selfRef">Acknowledgments</a>
+      </h2>
+<p id="appendix-A-1">The author thanks the participants in the Media over QUIC Transport working
+group for discussion of relay diagnostics and issue #1692. Additional
+acknowledgments will be added as the document develops.<a href="#appendix-A-1" class="pilcrow">¶</a></p>
+</section>
+</div>
+<div id="authors-addresses">
+<section id="appendix-B">
+      <h2 id="name-authors-address">
+<a href="#name-authors-address" class="section-name selfRef">Author's Address</a>
+      </h2>
+<address class="vcard">
+        <div dir="auto" class="left"><span class="fn nameRole">Altanai Bisht</span></div>
+<div dir="auto" class="left"><span class="org">Cisco</span></div>
+<div class="email">
+<span>Email:</span>
+<a href="mailto:altanai@outlook.com" class="email">altanai@outlook.com</a>
+</div>
+</address>
+</section>
+</div>
+<script>const toc = document.getElementById("toc");
+toc.querySelector("h2").addEventListener("click", e => {
+  toc.classList.toggle("active");
+});
+toc.querySelector("nav").addEventListener("click", e => {
+  toc.classList.remove("active");
+});
+</script>
+</body>
+</html>
