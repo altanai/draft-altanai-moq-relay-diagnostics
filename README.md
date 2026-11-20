@@ -1,4 +1,4 @@
-# Client-Visible Relay Diagnostics for Media over QUIC Transport (MOQT)
+# Relay Diagnostics for Media over QUIC Transport (MOQT)
 
 This is the working area for the individual Internet-Draft, "Relay Diagnostics for Media over QUIC Transport (MOQT)", for discussion in the IETF [MOQ Working Group](https://datatracker.ietf.org/group/moq/documents/).
 
