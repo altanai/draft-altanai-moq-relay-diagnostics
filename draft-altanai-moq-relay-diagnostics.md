@@ -76,18 +76,51 @@ A subscriber therefore terminates only the last hop of a multi-hop path, and the
 signals available to it locally are rarely sufficient to explain why delivery is
 degraded or has failed.
 
-This work originated in [Issue1692] and in discussion following IETF 126. Its
-purpose is to establish the use cases and requirements first, so that any wire
-format that follows is justified by a concrete operational need.
+The term "diagnostics" comes from [Issue1692], which asks how a client can
+get diagnostic data from a relay. Discussion following IETF 126 helped
+shape the use cases and requirements for any future wire format.
 
 ## Note to Readers
 
 This revision is a problem statement and requirements document. It defines no
 protocol elements. Comments are welcome on the MOQ working group mailing list.
 
-## Conventions and Definitions
+## Conventions
 
 {::boilerplate bcp14-tagged}
+
+## Terminology
+
+A **client-visible relay diagnostic** is a limited report of what one relay
+observed or did while handling a particular request. For example, when a
+subscription stalls, the relay may report that it handed Objects to its
+outgoing transport for that subscription. Whether those Objects reached the
+subscriber or why playback stalled may remain unknown. This document uses
+**operator telemetry** for the metrics, logs, and traces used to understand
+relay or service behavior within an authorized administrative scope.
+
+The transport roles follow [MoQTransport].
+
+* A **publisher** publishes a Track and sends its Objects to a subscriber.
+* A **subscriber** requests or accepts delivery of Objects from a Track.
+* A **relay** terminates MOQT sessions and forwards Objects between peers. It
+  can act as a subscriber upstream and as a publisher downstream, and may
+  cache Objects.
+
+This document uses the following operational roles.
+
+* A **relay operator** runs a relay or a fleet of relays.
+* A **service operator** operates a delivery service and uses authorized
+  telemetry to assess delivery or investigate user reports.
+* A **tenant operator** administers delivery for a tenant and can see the
+  observations authorized for that tenant.
+* A **telemetry collector** is a system that receives or retrieves metrics,
+  logs, or traces for an operator. When it subscribes to a MOQT telemetry
+  Track, it acts as a subscriber for that Track.
+
+An organization can fill several of these roles. For example, a service
+operator can run relays and publish content. Each role has its own scope of
+access under the deployment's policy.
 
 # Problem Statement
 
@@ -132,13 +165,13 @@ requests around policy.
 
 ## Supporting an Operator-Assisted Incident
 
-A user reports a delivery problem and an operator needs to correlate the
-client's report with the relay's handling of that user's request. A
-request-scoped diagnostic summary or a short-lived correlation value can help
-the user and operator discuss the same event. The value should not be a
-globally stable client identifier, and it should not enable one client to
-query another client's activity. More detailed logs may be available to the
-service operator through a separate, access-controlled observability system.
+A subscriber reports a delivery problem to the service operator. A diagnostic
+summary for the subscriber's own request or a short-lived correlation value
+can help the service operator match the report to the relay's handling of that
+request. The value should be short-lived and refer only to the event, while
+the subscriber's access remains limited to its own request. More detailed
+logs may be available to the service operator through a separately
+authorized observability system.
 
 ## Learning Whether Diagnostics Are Available
 
@@ -239,13 +272,12 @@ implementations could claim interoperability.
 
 # Operator Diagnostics at Operational Scale
 
-Operators need to assess service health across authorized relays, locate
-capacity pressure, and correlate user reports with local delivery events.
-Their administrative view can include measurements that are unsuitable for
-ordinary clients. The observations below are illustrative operator metrics,
-not standardized names or additions to the client-visible report. They can
-be collected through existing [MoQMetrics], [MoQLog], [QLOG], or deployment
-observability systems; this document selects no management protocol.
+Relay operators use operational measurements to assess capacity and behavior
+across the relays they run. Service operators use authorized observations to
+assess service health and correlate user reports with local delivery events.
+The metrics below illustrate those administrative views. A telemetry
+collector can use [MoQMetrics] data, [MoQLog] records, [QLOG] traces, or
+deployment observability data within its authorized collection scope.
 
 | Suggested operator observation | Operational use and measurement scope |
 | --- | --- |
@@ -258,8 +290,8 @@ observability systems; this document selects no management protocol.
 | `relay_process_resident_memory_bytes` | Resident memory of the relay process, with collection method identified; useful for capacity assessment alongside queue and cache observations. |
 | `relay_cached_payload_bytes` | Total payload length of distinct cached Objects, counted once per Full Track Name, Group ID, and Object ID; excludes metadata and is not physical process memory. |
 
-For example, a sustained rise in queue bytes together with delivery-timeout
-resets can guide investigation of scheduling or downstream capacity. A rise
+For example, a relay operator can investigate scheduling or downstream
+capacity when queue bytes and delivery-timeout resets rise together. A rise
 in failed upstream request attempts, observed where the relay acts as a
 requester, can guide examination of that relay's upstream connections. High
 CPU or resident memory with growing load can motivate capacity planning or
